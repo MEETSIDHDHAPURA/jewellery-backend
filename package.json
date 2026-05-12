@@ -16,7 +16,10 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "nodemon src/index.js",
-    "start": "node src/index.js"
+    "start": "node src/index.js",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write ."
   },
   "repository": {
     "type": "git",
@@ -29,5 +32,9 @@
     "url": "https://github.com/Mitmbinfoways/RFInfracon-backend/issues"
   },
   "homepage": "https://github.com/Mitmbinfoways/RFInfracon-backend#readme",
-  "description": ""
+  "description": "",
+  "devDependencies": {
+    "eslint": "^10.3.0",
+    "prettier": "^3.8.3"
+  }
 }

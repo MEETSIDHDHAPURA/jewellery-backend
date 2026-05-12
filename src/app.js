@@ -2,7 +2,6 @@ const express = require("express");
 const cors = require("cors");
 const path = require("path");
 const app = express();
-const contactRoutes = require("./Routes/Contact.Routes");
 const categoryRoutes = require("./Routes/Category.Routes");
 const productRoutes = require("./Routes/Product.Routes");
 const userRoutes = require("./Routes/User.Routes");
@@ -27,7 +26,6 @@ app.get("/", (req, res) => {
   res.send("Hello World!");
 });
 
-app.use("/api/v1/contact", contactRoutes);
 app.use("/api/v1/category", categoryRoutes);
 app.use("/api/v1/product", productRoutes);
 app.use("/api/v1/user", userRoutes);
