@@ -7,9 +7,16 @@ const path = require("path");
 // Create Product
 const createProduct = async (req, res) => {
     try {
-        const { title, description, category, Price, discountedPrice, discountPercentage, variants, specifications, isFeatured } = req.body;
+        const { 
+            title, description, category, Price, discountedPrice, 
+            discountPercentage, variants, specifications, isFeatured, isActive 
+        } = req.body;
 
         const images = req.files ? req.files.map(file => `/uploads/${file.filename}`) : [];
+
+        // Safely parse JSON strings from FormData
+        const parsedVariants = typeof variants === "string" ? JSON.parse(variants) : (variants || []);
+        const parsedSpecs = typeof specifications === "string" ? JSON.parse(specifications) : (specifications || {});
 
         const product = await Product.create({
             title,
@@ -19,9 +26,10 @@ const createProduct = async (req, res) => {
             discountedPrice,
             discountPercentage,
             images,
-            variants: variants ? JSON.parse(variants) : [],
-            specifications: specifications ? JSON.parse(specifications) : {},
-            isFeatured
+            variants: parsedVariants,
+            specifications: parsedSpecs,
+            isFeatured,
+            isActive: isActive !== undefined ? isActive : true
         });
 
         res.status(201).json(new ApiResponse(201, product, "Product created successfully"));
@@ -55,14 +63,19 @@ const getProductById = async (req, res) => {
 const updateProduct = async (req, res) => {
     try {
         const { id } = req.params;
-        const updateData = { ...req.body };
+        let updateData = { ...req.body };
 
         if (req.files && req.files.length > 0) {
             updateData.images = req.files.map(file => `/uploads/${file.filename}`);
         }
 
-        if (updateData.variants) updateData.variants = JSON.parse(updateData.variants);
-        if (updateData.specifications) updateData.specifications = JSON.parse(updateData.specifications);
+        // Safely parse JSON strings if they exist
+        if (updateData.variants) {
+            updateData.variants = typeof updateData.variants === "string" ? JSON.parse(updateData.variants) : updateData.variants;
+        }
+        if (updateData.specifications) {
+            updateData.specifications = typeof updateData.specifications === "string" ? JSON.parse(updateData.specifications) : updateData.specifications;
+        }
 
         const product = await Product.findByIdAndUpdate(id, updateData, { new: true });
         if (!product) throw new ApiError(404, "Product not found");

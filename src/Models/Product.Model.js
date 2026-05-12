@@ -34,7 +34,12 @@ const productSchema = new mongoose.Schema(
         variants: [
             {
                 metal: String,
-                stoneQuality: String,
+                diamondCarat: String,
+                diamondColor: String,
+                diamondClarity: String,
+                ringSize: String, // Specifically for Rings
+                lengthInches: String, // Specifically for Bracelets
+                chainLengthInches: String, // Specifically for Pendants
                 priceModifier: { type: Number, default: 0 },
                 stock: { type: Number, default: 0 }
             }
