@@ -62,7 +62,7 @@ const loginUser = async (req, res) => {
       { expiresIn: "7d" }
     );
 
-    const loggedInUser = await User.findById(user._id).select("-password");
+    const loggedInUser = await User.findById(user._id).select("-password -isActive -isDeleted");
 
     res.status(200).json(new ApiResponse(200, { user: loggedInUser, token }, "Login successful"));
   } catch (error) {
@@ -95,6 +95,7 @@ const forgotPassword = async (req, res) => {
         `;
 
     try {
+      console.log("test")
       await sendMail(user.email, "Password Reset Request", message);
       res.status(200).json(new ApiResponse(200, {}, "Reset email sent successfully"));
     } catch (error) {
