@@ -2,7 +2,6 @@ const Product = require("../Models/Product.Model");
 const ApiResponse = require("../Utils/ApiResponse");
 const ApiError = require("../Utils/ApiError");
 const fs = require("fs");
-const path = require("path");
 
 // Create Product
 const createProduct = async (req, res) => {
@@ -18,9 +17,20 @@ const createProduct = async (req, res) => {
       specifications,
       isFeatured,
       isActive,
+      sizeChart, // Optional: if passed as a string/URL
     } = req.body;
 
-    const images = req.files ? req.files.map((file) => `/uploads/${file.filename}`) : [];
+    let images = [];
+    let sizeChartPath = sizeChart || "";
+
+    if (req.files) {
+      if (req.files.images) {
+        images = req.files.images.map((file) => `/uploads/${file.filename}`);
+      }
+      if (req.files.sizeChart) {
+        sizeChartPath = `/uploads/${req.files.sizeChart[0].filename}`;
+      }
+    }
 
     // Safely parse JSON strings from FormData
     const parsedVariants = typeof variants === "string" ? JSON.parse(variants) : variants || [];
@@ -35,6 +45,7 @@ const createProduct = async (req, res) => {
       discountedPrice,
       discountPercentage,
       images,
+      sizeChart: sizeChartPath,
       variants: parsedVariants,
       specifications: parsedSpecs,
       isFeatured,
@@ -76,8 +87,13 @@ const updateProduct = async (req, res) => {
     const { id } = req.params;
     let updateData = { ...req.body };
 
-    if (req.files && req.files.length > 0) {
-      updateData.images = req.files.map((file) => `/uploads/${file.filename}`);
+    if (req.files) {
+      if (req.files.images && req.files.images.length > 0) {
+        updateData.images = req.files.images.map((file) => `/uploads/${file.filename}`);
+      }
+      if (req.files.sizeChart && req.files.sizeChart.length > 0) {
+        updateData.sizeChart = `/uploads/${req.files.sizeChart[0].filename}`;
+      }
     }
 
     // Safely parse JSON strings if they exist

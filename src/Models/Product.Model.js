@@ -31,6 +31,9 @@ const productSchema = new mongoose.Schema(
     images: {
       type: [String],
     },
+    sizeChart: {
+      type: String, // URL for Image/PDF
+    },
     variants: [
       {
         metal: String,
@@ -38,6 +41,10 @@ const productSchema = new mongoose.Schema(
         diamondColor: String,
         diamondClarity: String,
         ringSize: String, // Specifically for Rings
+        standardSize: {
+          type: String,
+          enum: ["extra small", "small", "medium", "large", "extra large"],
+        }, // For other categories
         lengthInches: String, // Specifically for Bracelets
         chainLengthInches: String, // Specifically for Pendants
         priceModifier: { type: Number, default: 0 },
