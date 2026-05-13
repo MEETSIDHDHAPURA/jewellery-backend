@@ -19,7 +19,8 @@
     "start": "node src/index.js",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "create-admin": "node src/scripts/createAdmin.js"
   },
   "repository": {
     "type": "git",
