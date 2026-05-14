@@ -57,6 +57,10 @@ const productSchema = new mongoose.Schema(
       dimensions: String,
       stoneDetails: String,
     },
+    occasion: {
+      type: [String],
+      default: [],
+    },
     isFeatured: {
       type: Boolean,
       default: false,

@@ -11,6 +11,7 @@ const couponRoutes = require("./Routes/Coupon.Routes");
 const policyRoutes = require("./Routes/Policy.Routes");
 const looseDiamondRoutes = require("./Routes/LooseDiamond.Routes");
 const navigationRoutes = require("./Routes/Navigation.Routes");
+const reviewRoutes = require("./Routes/Review.Routes");
 
 app.use(
   cors({
@@ -35,5 +36,6 @@ app.use("/api/v1/coupon", couponRoutes);
 app.use("/api/v1/policy", policyRoutes);
 app.use("/api/v1/loose-diamond", looseDiamondRoutes);
 app.use("/api/v1/navigation", navigationRoutes);
+app.use("/api/v1/review", reviewRoutes);
 
 module.exports = app;

@@ -15,6 +15,7 @@ const createProduct = async (req, res) => {
       discountPercentage,
       variants,
       specifications,
+      occasion,
       isFeatured,
       isActive,
       sizeChart, // Optional: if passed as a string/URL
@@ -37,6 +38,19 @@ const createProduct = async (req, res) => {
     const parsedSpecs =
       typeof specifications === "string" ? JSON.parse(specifications) : specifications || {};
 
+    let parsedOccasion = [];
+    if (occasion) {
+      if (typeof occasion === "string") {
+        try {
+          parsedOccasion = JSON.parse(occasion);
+        } catch(e) {
+          parsedOccasion = [occasion];
+        }
+      } else if (Array.isArray(occasion)) {
+        parsedOccasion = occasion;
+      }
+    }
+
     const product = await Product.create({
       title,
       description,
@@ -48,6 +62,7 @@ const createProduct = async (req, res) => {
       sizeChart: sizeChartPath,
       variants: parsedVariants,
       specifications: parsedSpecs,
+      occasion: parsedOccasion,
       isFeatured,
       isActive: isActive !== undefined ? isActive : true,
     });
@@ -61,7 +76,15 @@ const createProduct = async (req, res) => {
 // Get All Products
 const getAllProducts = async (req, res) => {
   try {
-    const products = await Product.find({ isDeleted: false })
+    const { occasion } = req.query;
+    const filter = { isDeleted: false };
+    
+    if (occasion) {
+      const occasionsArray = Array.isArray(occasion) ? occasion : occasion.split(',');
+      filter.occasion = { $in: occasionsArray };
+    }
+
+    const products = await Product.find(filter)
       .populate("category")
       .sort({ createdAt: -1 });
     res.status(200).json(new ApiResponse(200, products, "Products fetched successfully"));
@@ -108,6 +131,15 @@ const updateProduct = async (req, res) => {
         typeof updateData.specifications === "string"
           ? JSON.parse(updateData.specifications)
           : updateData.specifications;
+    }
+    if (updateData.occasion) {
+      if (typeof updateData.occasion === "string") {
+        try {
+          updateData.occasion = JSON.parse(updateData.occasion);
+        } catch(e) {
+          updateData.occasion = [updateData.occasion];
+        }
+      }
     }
 
     const product = await Product.findByIdAndUpdate(id, updateData, { new: true });
