@@ -161,10 +161,44 @@ const updateUserProfile = async (req, res) => {
     if (phone) user.phone = phone;
     if (addresses) user.addresses = addresses;
 
+    // Handle avatar update if a file is uploaded
+    if (req.file) {
+      user.avatar = `/uploads/${req.file.filename}`;
+    }
+
     await user.save();
     const updatedUser = await User.findById(id).select("-password");
 
     res.status(200).json(new ApiResponse(200, updatedUser, "Profile updated successfully"));
+  } catch (error) {
+    res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));
+  }
+};
+
+// Update Password
+const updatePassword = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { currentPassword, newPassword } = req.body;
+
+    if (!currentPassword || !newPassword) {
+      throw new ApiError(400, "Current password and new password are required");
+    }
+
+    const user = await User.findById(id);
+    if (!user) {
+      throw new ApiError(404, "User not found");
+    }
+
+    const isPasswordValid = await bcrypt.compare(currentPassword, user.password);
+    if (!isPasswordValid) {
+      throw new ApiError(401, "Invalid current password");
+    }
+
+    user.password = await bcrypt.hash(newPassword, 10);
+    await user.save();
+
+    res.status(200).json(new ApiResponse(200, {}, "Password updated successfully"));
   } catch (error) {
     res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));
   }
@@ -189,5 +223,6 @@ module.exports = {
   resetPassword,
   getUserProfile,
   updateUserProfile,
+  updatePassword,
   getAllUsers,
 };
