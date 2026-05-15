@@ -31,7 +31,14 @@ const createCategory = async (req, res) => {
 // Get All Categories
 const getAllCategories = async (req, res) => {
   try {
-    const categories = await Category.find({ isActive: true }).sort({ name: 1 });
+    const { search } = req.query;
+    let query = { isActive: true };
+
+    if (search) {
+      query.name = { $regex: search, $options: "i" };
+    }
+
+    const categories = await Category.find(query).sort({ name: 1 });
     res.status(200).json(new ApiResponse(200, categories, "Categories fetched successfully"));
   } catch (error) {
     res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));
