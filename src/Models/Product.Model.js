@@ -1,4 +1,5 @@
 const mongoose = require("mongoose");
+const diamondOptionSchema = require("./DiamondOption.Schema");
 
 const productSchema = new mongoose.Schema(
   {
@@ -6,6 +7,13 @@ const productSchema = new mongoose.Schema(
       type: String,
       required: true,
       trim: true,
+      index: true,
+    },
+    slug: {
+      type: String,
+      required: true,
+      unique: true,
+      lowercase: true,
     },
     description: {
       type: String, // Rich text content
@@ -15,7 +23,9 @@ const productSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "Category",
       required: true,
+      index: true,
     },
+    // Base prices for quick listing/searching
     Price: {
       type: Number,
       required: true,
@@ -27,6 +37,7 @@ const productSchema = new mongoose.Schema(
     discountPercentage: {
       type: Number,
       required: true,
+      default: 0,
     },
     images: {
       type: [String],
@@ -34,33 +45,56 @@ const productSchema = new mongoose.Schema(
     sizeChart: {
       type: String, // URL for Image/PDF
     },
+    
+    // Dynamic Pricing Logic
+    makingCharge: {
+      type: Number,
+      required: true,
+      default: 0,
+    },
+    makingChargeType: {
+      type: String,
+      enum: ["fixed", "per_gram"],
+      default: "per_gram",
+    },
+    gstPercentage: {
+      type: Number,
+      default: 3, // Standard GST for jewellery in India
+    },
+
+    // Scalable Options
+    diamondOptions: [diamondOptionSchema],
+    
+    // Referenced Variants for Inventory/SKU management
     variants: [
       {
-        metal: String,
-        diamondCarat: String,
-        diamondColor: String,
-        diamondClarity: String,
-        ringSize: String, // Specifically for Rings
-        standardSize: {
-          type: String,
-          enum: ["extra small", "small", "medium", "large", "extra large"],
-        }, // For other categories
-        lengthInches: String, // Specifically for Bracelets
-        chainLengthInches: String, // Specifically for Pendants
-        priceModifier: { type: Number, default: 0 },
-        stock: { type: Number, default: 0 },
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "ProductVariant",
       },
     ],
+
     specifications: {
-      weight: String,
-      purity: String,
       dimensions: String,
       stoneDetails: String,
+      certification: String, // e.g., "SGL", "IGI", "BIS Hallmark"
     },
+    
     occasion: {
       type: [String],
+      enum: ["Daily Wear", "Wedding", "Party Wear", "Engagement", "Work Wear", "Anniversary"],
       default: [],
     },
+    gender: {
+      type: String,
+      enum: ["Women", "Men", "Unisex", "Kids"],
+      default: "Women",
+    },
+
+    // SEO & Marketing
+    metaTitle: String,
+    metaDescription: String,
+    keywords: [String],
+
     isFeatured: {
       type: Boolean,
       default: false,
@@ -76,5 +110,9 @@ const productSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+// Indexes for common filters
+productSchema.index({ isFeatured: 1, isActive: 1 });
+productSchema.index({ category: 1, isActive: 1 });
 
 module.exports = mongoose.model("Product", productSchema);
