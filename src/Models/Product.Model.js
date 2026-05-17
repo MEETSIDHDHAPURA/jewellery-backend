@@ -45,8 +45,6 @@ const productSchema = new mongoose.Schema(
     sizeChart: {
       type: String, // URL for Image/PDF
     },
-    
-    // Dynamic Pricing Logic
     makingCharge: {
       type: Number,
       required: true,
@@ -110,9 +108,5 @@ const productSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
-
-// Indexes for common filters
-productSchema.index({ isFeatured: 1, isActive: 1 });
-productSchema.index({ category: 1, isActive: 1 });
 
 module.exports = mongoose.model("Product", productSchema);

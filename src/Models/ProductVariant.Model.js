@@ -60,7 +60,4 @@ const productVariantSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-// Indexing for faster filtering on the frontend
-productVariantSchema.index({ productId: 1, metal: 1, purity: 1, sizeValue: 1 });
-
 module.exports = mongoose.model("ProductVariant", productVariantSchema);
