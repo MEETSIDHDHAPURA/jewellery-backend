@@ -13,6 +13,7 @@ const looseDiamondRoutes = require("./Routes/LooseDiamond.Routes");
 const navigationRoutes = require("./Routes/Navigation.Routes");
 const reviewRoutes = require("./Routes/Review.Routes");
 const metalRateRoutes = require("./Routes/MetalRate.routes");
+const taxRoutes = require("./Routes/Tax.Routes");
 
 app.use(
   cors({
@@ -39,5 +40,6 @@ app.use("/api/v1/loose-diamond", looseDiamondRoutes);
 app.use("/api/v1/navigation", navigationRoutes);
 app.use("/api/v1/review", reviewRoutes);
 app.use("/api/v1/metal-rate", metalRateRoutes);
+app.use("/api/v1/tax", taxRoutes);
 
 module.exports = app;
