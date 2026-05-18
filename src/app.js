@@ -14,6 +14,7 @@ const navigationRoutes = require("./Routes/Navigation.Routes");
 const reviewRoutes = require("./Routes/Review.Routes");
 const metalRateRoutes = require("./Routes/MetalRate.routes");
 const taxRoutes = require("./Routes/Tax.Routes");
+const makingChargeRoutes = require("./Routes/MakingCharge.routes");
 
 app.use(
   cors({
@@ -41,5 +42,6 @@ app.use("/api/v1/navigation", navigationRoutes);
 app.use("/api/v1/review", reviewRoutes);
 app.use("/api/v1/metal-rate", metalRateRoutes);
 app.use("/api/v1/tax", taxRoutes);
+app.use("/api/v1/making-charge", makingChargeRoutes);
 
 module.exports = app;
