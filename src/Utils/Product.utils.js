@@ -54,28 +54,19 @@ const generateVariantCombinations = (productId, productTitle, config) => {
   return variants;
 };
 
-/**
- * Calculates final price for frontend display
- */
-const calculatePrice = (variant, diamond, makingCharge, makingChargeType, gst) => {
-  let subTotal = (variant?.basePrice || 0);
+const calculatePrice = (variant, diamond, metalRate, makingCharge, makingChargeType, gst) => {
+  const metalCost = (variant?.weight || 0) * (metalRate || 0);
+  const makingCost = (variant?.weight || 0) * (makingCharge || 0);
+  const diamondCost = (diamond?.additionalPrice || 0);
   
-  // Add Diamond Price
-  if (diamond && diamond.additionalPrice) {
-    subTotal += diamond.additionalPrice;
-  }
-
-  // Add Making Charge
-  if (makingChargeType === "per_gram") {
-    subTotal += (makingCharge * (variant?.weight || 0));
-  } else {
-    subTotal += (makingCharge || 0);
-  }
-
-  const gstAmount = subTotal * (gst / 100);
+  const subTotal = metalCost + makingCost + diamondCost;
+  const gstAmount = subTotal * ((gst || 3) / 100);
   const finalPrice = subTotal + gstAmount;
 
   return {
+    metalCost: Math.round(metalCost),
+    makingCost: Math.round(makingCost),
+    diamondCost: Math.round(diamondCost),
     subTotal: Math.round(subTotal),
     gstAmount: Math.round(gstAmount),
     finalPrice: Math.round(finalPrice),

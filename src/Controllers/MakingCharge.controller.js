@@ -92,10 +92,46 @@ const deleteMakingCharge = async (req, res) => {
   }
 };
 
+// ============= MARGIN =============
+const GlobalConfig = require("../Models/GlobalConfig.Model.js");
+
+// Get Margin
+const getMargin = async (req, res) => {
+  try {
+    const config = await GlobalConfig.findOne({ key: "margin_percentage" });
+    const margin = config ? config.value : 0;
+    res.status(200).json(new ApiResponse(200, { margin }, "Margin fetched successfully"));
+  } catch (error) {
+    res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));
+  }
+};
+
+// Set Margin
+const setMargin = async (req, res) => {
+  try {
+    const { margin } = req.body;
+    if (margin === undefined || margin === null) {
+      throw new ApiError(400, "margin is required");
+    }
+
+    const config = await GlobalConfig.findOneAndUpdate(
+      { key: "margin_percentage" },
+      { key: "margin_percentage", value: Number(margin) },
+      { upsert: true, new: true }
+    );
+
+    res.status(200).json(new ApiResponse(200, { margin: config.value }, "Margin updated successfully"));
+  } catch (error) {
+    res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));
+  }
+};
+
 module.exports = {
   createMakingCharge,
   getMakingCharges,
   getMakingChargeById,
   updateMakingCharge,
   deleteMakingCharge,
+  getMargin,
+  setMargin,
 };

@@ -14,7 +14,7 @@ const createProduct = async (req, res) => {
       title, slug, description, category, makingCharge, makingChargeType,
       gstPercentage, diamondOptions, variantConfig, specifications,
       occasion, gender, isFeatured, isActive, Price, discountedPrice,
-      discountPercentage
+      discountPercentage, basePrice, silverBasePrice, weight
     } = req.body;
 
     let images = [];
@@ -36,7 +36,8 @@ const createProduct = async (req, res) => {
       diamondOptions: typeof diamondOptions === "string" ? JSON.parse(diamondOptions) : diamondOptions,
       specifications: typeof specifications === "string" ? JSON.parse(specifications) : specifications,
       occasion: typeof occasion === "string" ? JSON.parse(occasion) : occasion,
-      gender, isFeatured, isActive, Price, discountedPrice, discountPercentage
+      gender, isFeatured, isActive, Price, discountedPrice, discountPercentage,
+      basePrice, silverBasePrice, weight
     });
 
     // 2. Generate and Create Variants if config is provided

@@ -16,6 +16,8 @@ const metalRateRoutes = require("./Routes/MetalRate.routes");
 const taxRoutes = require("./Routes/Tax.Routes");
 const makingChargeRoutes = require("./Routes/MakingCharge.routes");
 const supportRoutes = require("./Routes/Support.Routes");
+const pricingModifierRoutes = require("./Routes/PricingModifier.Routes");
+const diamondPriceRoutes = require("./Routes/DiamondPrice.routes");
 
 app.use(
   cors({
@@ -45,5 +47,7 @@ app.use("/api/v1/metal-rate", metalRateRoutes);
 app.use("/api/v1/tax", taxRoutes);
 app.use("/api/v1/making-charge", makingChargeRoutes);
 app.use("/api/v1/support", supportRoutes);
+app.use("/api/v1/pricing-modifier", pricingModifierRoutes);
+app.use("/api/v1/diamond-price", diamondPriceRoutes);
 
 module.exports = app;

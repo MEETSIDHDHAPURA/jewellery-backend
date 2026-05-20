@@ -62,8 +62,42 @@ const productSchema = new mongoose.Schema(
 
     // Scalable Options
     diamondOptions: [diamondOptionSchema],
+
+    // Modifier-Based Pricing: Allowed attributes for this product
+    basePrice: {
+      type: Number, // Gold Making Cost
+      default: 0,
+    },
+    silverBasePrice: {
+      type: Number, // Silver Making Cost
+      default: 0,
+    },
+    weight: {
+      type: Number, // Product weight in grams
+      default: 0,
+    },
+    allowedMetals: {
+      type: [String],
+      default: [],
+    },
+    allowedCarats: {
+      type: [String],
+      default: [],
+    },
+    allowedClarities: {
+      type: [String],
+      default: [],
+    },
+    allowedColors: {
+      type: [String],
+      default: [],
+    },
+    allowedSizes: {
+      type: [String],
+      default: [],
+    },
     
-    // Referenced Variants for Inventory/SKU management
+    // Referenced Variants for Inventory/SKU management (legacy support)
     variants: [
       {
         type: mongoose.Schema.Types.ObjectId,

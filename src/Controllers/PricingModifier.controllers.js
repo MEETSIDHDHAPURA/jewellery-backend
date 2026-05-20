@@ -1,0 +1,412 @@
+const PricingModifier = require("../Models/PricingModifier.Model");
+const Product = require("../Models/Product.Model");
+const MetalRate = require("../Models/MetalRate.Model");
+const MakingCharge = require("../Models/MakingCharge.Model");
+const ApiResponse = require("../Utils/ApiResponse");
+const ApiError = require("../Utils/ApiError");
+
+/**
+ * Get All Pricing Modifiers (grouped by attributeType)
+ */
+const getAllModifiers = async (req, res) => {
+  try {
+    const modifiers = await PricingModifier.find({ isActive: true }).sort({
+      attributeType: 1,
+      sortOrder: 1,
+    });
+
+    // Group by attributeType for frontend convenience
+    const grouped = modifiers.reduce((acc, mod) => {
+      if (!acc[mod.attributeType]) acc[mod.attributeType] = [];
+      acc[mod.attributeType].push(mod);
+      return acc;
+    }, {});
+
+    res
+      .status(200)
+      .json(
+        new ApiResponse(200, grouped, "Pricing modifiers fetched successfully")
+      );
+  } catch (error) {
+    res
+      .status(error.statusCode || 500)
+      .json(new ApiError(error.statusCode || 500, error.message));
+  }
+};
+
+/**
+ * Get All Modifiers (flat list, including inactive)
+ */
+const getAllModifiersFlat = async (req, res) => {
+  try {
+    const modifiers = await PricingModifier.find().sort({
+      attributeType: 1,
+      sortOrder: 1,
+    });
+
+    res
+      .status(200)
+      .json(
+        new ApiResponse(200, modifiers, "All modifiers fetched successfully")
+      );
+  } catch (error) {
+    res
+      .status(error.statusCode || 500)
+      .json(new ApiError(error.statusCode || 500, error.message));
+  }
+};
+
+/**
+ * Create a Pricing Modifier
+ */
+const createModifier = async (req, res) => {
+  try {
+    const { attributeType, value, label, modifierType, modifierValue, sortOrder } = req.body;
+
+    if (!attributeType || !value || !label || modifierValue === undefined) {
+      throw new ApiError(400, "attributeType, value, label, and modifierValue are required");
+    }
+
+    const modifier = await PricingModifier.create({
+      attributeType,
+      value,
+      label,
+      modifierType: modifierType || "multiplier",
+      modifierValue,
+      sortOrder: sortOrder || 0,
+    });
+
+    res
+      .status(201)
+      .json(
+        new ApiResponse(201, modifier, "Pricing modifier created successfully")
+      );
+  } catch (error) {
+    if (error.code === 11000) {
+      return res
+        .status(409)
+        .json(
+          new ApiError(409, "A modifier with this attribute type and value already exists")
+        );
+    }
+    res
+      .status(error.statusCode || 500)
+      .json(new ApiError(error.statusCode || 500, error.message));
+  }
+};
+
+/**
+ * Update a Pricing Modifier
+ */
+const updateModifier = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const modifier = await PricingModifier.findByIdAndUpdate(id, req.body, {
+      new: true,
+    });
+
+    if (!modifier) throw new ApiError(404, "Modifier not found");
+
+    res
+      .status(200)
+      .json(
+        new ApiResponse(200, modifier, "Pricing modifier updated successfully")
+      );
+  } catch (error) {
+    res
+      .status(error.statusCode || 500)
+      .json(new ApiError(error.statusCode || 500, error.message));
+  }
+};
+
+/**
+ * Delete a Pricing Modifier
+ */
+const deleteModifier = async (req, res) => {
+  try {
+    const modifier = await PricingModifier.findByIdAndDelete(req.params.id);
+    if (!modifier) throw new ApiError(404, "Modifier not found");
+
+    res
+      .status(200)
+      .json(new ApiResponse(200, {}, "Pricing modifier deleted successfully"));
+  } catch (error) {
+    res
+      .status(error.statusCode || 500)
+      .json(new ApiError(error.statusCode || 500, error.message));
+  }
+};
+
+/**
+ * Seed Default Industry-Standard Modifiers
+ */
+const seedDefaults = async (req, res) => {
+  try {
+    const defaults = [
+      // ===== METALS (multiplier) =====
+      { attributeType: "metal", value: "925 Silver", label: "925 Silver", modifierType: "multiplier", modifierValue: 1.0, sortOrder: 1 },
+      { attributeType: "metal", value: "10K Yellow Gold", label: "10K Yellow Gold", modifierType: "multiplier", modifierValue: 2.1, sortOrder: 2 },
+      { attributeType: "metal", value: "10K White Gold", label: "10K White Gold", modifierType: "multiplier", modifierValue: 2.1, sortOrder: 3 },
+      { attributeType: "metal", value: "10K Rose Gold", label: "10K Rose Gold", modifierType: "multiplier", modifierValue: 2.2, sortOrder: 4 },
+      { attributeType: "metal", value: "14K Yellow Gold", label: "14K Yellow Gold", modifierType: "multiplier", modifierValue: 3.2, sortOrder: 5 },
+      { attributeType: "metal", value: "14K White Gold", label: "14K White Gold", modifierType: "multiplier", modifierValue: 3.2, sortOrder: 6 },
+      { attributeType: "metal", value: "14K Rose Gold", label: "14K Rose Gold", modifierType: "multiplier", modifierValue: 3.3, sortOrder: 7 },
+      { attributeType: "metal", value: "18K Yellow Gold", label: "18K Yellow Gold", modifierType: "multiplier", modifierValue: 4.5, sortOrder: 8 },
+      { attributeType: "metal", value: "18K White Gold", label: "18K White Gold", modifierType: "multiplier", modifierValue: 4.5, sortOrder: 9 },
+      { attributeType: "metal", value: "18K Rose Gold", label: "18K Rose Gold", modifierType: "multiplier", modifierValue: 4.6, sortOrder: 10 },
+      { attributeType: "metal", value: "Platinum 950", label: "Platinum 950", modifierType: "multiplier", modifierValue: 6.0, sortOrder: 11 },
+
+      // ===== CARATS (multiplier) =====
+      { attributeType: "carat", value: "0.20ct", label: "0.20 Carat", modifierType: "multiplier", modifierValue: 1.0, sortOrder: 1 },
+      { attributeType: "carat", value: "0.30ct", label: "0.30 Carat", modifierType: "multiplier", modifierValue: 1.8, sortOrder: 2 },
+      { attributeType: "carat", value: "0.50ct", label: "0.50 Carat", modifierType: "multiplier", modifierValue: 3.2, sortOrder: 3 },
+      { attributeType: "carat", value: "0.70ct", label: "0.70 Carat", modifierType: "multiplier", modifierValue: 5.5, sortOrder: 4 },
+      { attributeType: "carat", value: "1.00ct", label: "1.00 Carat", modifierType: "multiplier", modifierValue: 8.5, sortOrder: 5 },
+      { attributeType: "carat", value: "1.50ct", label: "1.50 Carat", modifierType: "multiplier", modifierValue: 18.0, sortOrder: 6 },
+      { attributeType: "carat", value: "2.00ct", label: "2.00 Carat", modifierType: "multiplier", modifierValue: 32.0, sortOrder: 7 },
+
+      // ===== CLARITY (flat_add — $5 reduction per step from IF) =====
+      { attributeType: "clarity", value: "IF", label: "IF (Internally Flawless)", modifierType: "flat_add", modifierValue: 0, sortOrder: 1 },
+      { attributeType: "clarity", value: "VVS1", label: "VVS1", modifierType: "flat_add", modifierValue: -5, sortOrder: 2 },
+      { attributeType: "clarity", value: "VVS2", label: "VVS2", modifierType: "flat_add", modifierValue: -10, sortOrder: 3 },
+      { attributeType: "clarity", value: "VS1", label: "VS1", modifierType: "flat_add", modifierValue: -15, sortOrder: 4 },
+      { attributeType: "clarity", value: "VS2", label: "VS2", modifierType: "flat_add", modifierValue: -20, sortOrder: 5 },
+      { attributeType: "clarity", value: "SI1", label: "SI1", modifierType: "flat_add", modifierValue: -25, sortOrder: 6 },
+      { attributeType: "clarity", value: "SI2", label: "SI2", modifierType: "flat_add", modifierValue: -30, sortOrder: 7 },
+
+      // ===== COLOR (flat_add — $5 reduction per step from D) =====
+      { attributeType: "color", value: "D", label: "D (Colorless)", modifierType: "flat_add", modifierValue: 0, sortOrder: 1 },
+      { attributeType: "color", value: "E", label: "E (Colorless)", modifierType: "flat_add", modifierValue: -5, sortOrder: 2 },
+      { attributeType: "color", value: "F", label: "F (Colorless)", modifierType: "flat_add", modifierValue: -10, sortOrder: 3 },
+      { attributeType: "color", value: "G", label: "G (Near Colorless)", modifierType: "flat_add", modifierValue: -15, sortOrder: 4 },
+      { attributeType: "color", value: "H", label: "H (Near Colorless)", modifierType: "flat_add", modifierValue: -20, sortOrder: 5 },
+      { attributeType: "color", value: "I", label: "I (Near Colorless)", modifierType: "flat_add", modifierValue: -25, sortOrder: 6 },
+      { attributeType: "color", value: "J", label: "J (Near Colorless)", modifierType: "flat_add", modifierValue: -30, sortOrder: 7 },
+
+      // ===== SIZES (flat_add) =====
+      { attributeType: "size", value: "4", label: "Size 4", modifierType: "flat_add", modifierValue: 0, sortOrder: 1 },
+      { attributeType: "size", value: "4.5", label: "Size 4.5", modifierType: "flat_add", modifierValue: 0, sortOrder: 2 },
+      { attributeType: "size", value: "5", label: "Size 5", modifierType: "flat_add", modifierValue: 0, sortOrder: 3 },
+      { attributeType: "size", value: "5.5", label: "Size 5.5", modifierType: "flat_add", modifierValue: 0, sortOrder: 4 },
+      { attributeType: "size", value: "6", label: "Size 6", modifierType: "flat_add", modifierValue: 0, sortOrder: 5 },
+      { attributeType: "size", value: "6.5", label: "Size 6.5", modifierType: "flat_add", modifierValue: 0, sortOrder: 6 },
+      { attributeType: "size", value: "7", label: "Size 7", modifierType: "flat_add", modifierValue: 0, sortOrder: 7 },
+      { attributeType: "size", value: "7.5", label: "Size 7.5", modifierType: "flat_add", modifierValue: 0, sortOrder: 8 },
+      { attributeType: "size", value: "8", label: "Size 8", modifierType: "flat_add", modifierValue: 0, sortOrder: 9 },
+      { attributeType: "size", value: "8.5", label: "Size 8.5", modifierType: "flat_add", modifierValue: 200, sortOrder: 10 },
+      { attributeType: "size", value: "9", label: "Size 9", modifierType: "flat_add", modifierValue: 300, sortOrder: 11 },
+      { attributeType: "size", value: "9.5", label: "Size 9.5", modifierType: "flat_add", modifierValue: 500, sortOrder: 12 },
+      { attributeType: "size", value: "10", label: "Size 10", modifierType: "flat_add", modifierValue: 500, sortOrder: 13 },
+    ];
+
+    // Use upsert to avoid duplicates on re-seed
+    const results = [];
+    for (const mod of defaults) {
+      const result = await PricingModifier.findOneAndUpdate(
+        { attributeType: mod.attributeType, value: mod.value },
+        mod,
+        { upsert: true, new: true }
+      );
+      results.push(result);
+    }
+
+    res
+      .status(200)
+      .json(
+        new ApiResponse(200, { count: results.length }, `${results.length} default modifiers seeded successfully`)
+      );
+  } catch (error) {
+    res
+      .status(error.statusCode || 500)
+      .json(new ApiError(error.statusCode || 500, error.message));
+  }
+};
+
+/**
+ * Helper to parse metal selection
+ */
+const parseMetalSelection = (value) => {
+  const val = (value || "").toLowerCase();
+  if (val.includes("silver")) {
+    return { purity: "925", metal: "Silver" };
+  }
+  if (val.includes("platinum")) {
+    return { purity: "PT950", metal: "Platinum" };
+  }
+  
+  // Gold cases
+  const purities = ["10K", "14K", "18K", "20K", "22K", "24K"];
+  const purity = purities.find(p => value.includes(p)) || "18K";
+  
+  let metal = "Yellow Gold";
+  if (val.includes("white")) {
+    metal = "White Gold";
+  } else if (val.includes("rose")) {
+    metal = "Rose Gold";
+  }
+  
+  return { purity, metal };
+};
+
+/**
+ * Calculate Price — BOM-based validation endpoint
+ */
+const calculatePrice = async (req, res) => {
+  try {
+    const { basePrice, silverBasePrice, weight, selections, productId } = req.body;
+    // selections = { metal: "18K White Gold", carat: "1.00ct", clarity: "VS1", color: "G", size: "7" }
+
+    if (!selections) {
+      throw new ApiError(400, "selections is required");
+    }
+
+    let prod = null;
+    if (productId) {
+      prod = await Product.findById(productId);
+    }
+
+    const pBasePrice = prod ? (prod.basePrice || 0) : (Number(basePrice) || 0);
+    const pSilverBasePrice = prod ? (prod.silverBasePrice || 0) : (Number(silverBasePrice) || 0);
+    const pWeight = prod ? (prod.weight || 0) : (Number(weight) || 0);
+    const gstPercentage = prod ? (prod.gstPercentage || 3) : (Number(req.body.gstPercentage) || 3);
+    const diamondOptions = prod ? (prod.diamondOptions || []) : (req.body.diamondOptions || []);
+
+    const selectedMetalVal = selections.metal || "";
+    const isSilver = selectedMetalVal.toLowerCase().includes("silver");
+    const isPlatinum = selectedMetalVal.toLowerCase().includes("platinum");
+
+    // 1. Calculate Metal Cost
+    let metalPricePerGram = 0;
+    if (selectedMetalVal) {
+      const parsed = parseMetalSelection(selectedMetalVal);
+      const metalRateDoc = await MetalRate.findOne({
+        metal: parsed.metal,
+        purity: parsed.purity
+      });
+
+      if (metalRateDoc) {
+        metalPricePerGram = metalRateDoc.pricePerGram;
+      } else {
+        // Fallback pricing if rate doc not in db yet
+        if (isSilver) metalPricePerGram = 80;
+        else if (isPlatinum) metalPricePerGram = 4000;
+        else {
+          if (parsed.purity === "24K") metalPricePerGram = 7500;
+          else if (parsed.purity === "22K") metalPricePerGram = 6875;
+          else if (parsed.purity === "18K") metalPricePerGram = 5625;
+          else if (parsed.purity === "14K") metalPricePerGram = 4375;
+          else metalPricePerGram = 3125;
+        }
+      }
+    }
+    const metalCost = pWeight * metalPricePerGram;
+
+    // 2. Calculate Making Cost — fetched from MakingCharge collection
+    let makingCostRate = 0;
+    if (selectedMetalVal) {
+      let searchMetal = "Yellow Gold";
+      if (isSilver) searchMetal = "Silver";
+      else if (isPlatinum) searchMetal = "Platinum";
+      else if (selectedMetalVal.toLowerCase().includes("white")) searchMetal = "White Gold";
+      else if (selectedMetalVal.toLowerCase().includes("rose")) searchMetal = "Rose Gold";
+      else searchMetal = "Yellow Gold";
+
+      const mcDoc = await MakingCharge.findOne({ metal: searchMetal });
+      if (mcDoc) makingCostRate = mcDoc.value || 0;
+    }
+    const makingCost = pWeight * makingCostRate;
+
+    // 3. Calculate Diamond Base Cost (match by CARAT only — color/clarity handled via modifiers)
+    let diamondCost = 0;
+    const selectedCarat = selections.carat || "";
+    const selectedClarity = selections.clarity || "";
+    const selectedColor = selections.color || "";
+
+    if (selectedCarat) {
+      const matchedOpt = diamondOptions.find(opt => {
+        const optCaratNum = parseFloat(opt.carat);
+        const selCaratNum = parseFloat(selectedCarat);
+        return !isNaN(optCaratNum) && !isNaN(selCaratNum) && optCaratNum === selCaratNum;
+      });
+
+      if (matchedOpt) {
+        diamondCost = matchedOpt.additionalPrice || 0;
+      }
+    }
+
+    // 4. Calculate Color flat modifier
+    let colorModifier = 0;
+    if (selectedColor) {
+      const modifier = await PricingModifier.findOne({
+        attributeType: "color",
+        value: selectedColor,
+        isActive: true,
+      });
+      if (modifier && modifier.modifierType === "flat_add") {
+        colorModifier = modifier.modifierValue;
+      }
+    }
+
+    // 5. Calculate Clarity flat modifier
+    let clarityModifier = 0;
+    if (selectedClarity) {
+      const modifier = await PricingModifier.findOne({
+        attributeType: "clarity",
+        value: selectedClarity,
+        isActive: true,
+      });
+      if (modifier && modifier.modifierType === "flat_add") {
+        clarityModifier = modifier.modifierValue;
+      }
+    }
+
+    // 6. Calculate Size flat modifier
+    let sizeModifier = 0;
+    if (selections.size) {
+      const modifier = await PricingModifier.findOne({
+        attributeType: "size",
+        value: selections.size,
+        isActive: true,
+      });
+      if (modifier && modifier.modifierType === "flat_add") {
+        sizeModifier = modifier.modifierValue;
+      }
+    }
+
+    // 7. Compute totals
+    const subTotal = metalCost + makingCost + diamondCost + colorModifier + clarityModifier + sizeModifier;
+    const gstAmount = subTotal * (gstPercentage / 100);
+    const finalPrice = subTotal + gstAmount;
+
+    res.status(200).json(
+      new ApiResponse(
+        200,
+        {
+          metalCost: Math.round(metalCost),
+          makingCost: Math.round(makingCost),
+          diamondCost: Math.round(diamondCost),
+          colorAdjustment: Math.round(colorModifier),
+          clarityAdjustment: Math.round(clarityModifier),
+          sizeCost: Math.round(sizeModifier),
+          subTotal: Math.round(subTotal),
+          gstAmount: Math.round(gstAmount),
+          finalPrice: Math.round(finalPrice),
+          selections
+        },
+        "Price calculated successfully using BOM approach"
+      )
+    );
+  } catch (error) {
+    res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));
+  }
+};
+
+module.exports = {
+  getAllModifiers,
+  getAllModifiersFlat,
+  createModifier,
+  updateModifier,
+  deleteModifier,
+  seedDefaults,
+  calculatePrice,
+};
