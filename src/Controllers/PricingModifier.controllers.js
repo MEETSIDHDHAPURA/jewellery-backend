@@ -253,7 +253,18 @@ const parseMetalSelection = (value) => {
  */
 const calculatePrice = async (req, res) => {
   try {
-    const { basePrice, silverBasePrice, weight, selections, productId } = req.body;
+    const {
+      basePrice,
+      silverBasePrice,
+      weight,
+      weight10K,
+      weight14K,
+      weight18K,
+      weightSilver,
+      weightPlatinum,
+      selections,
+      productId
+    } = req.body;
     // selections = { metal: "18K White Gold", carat: "1.00ct", clarity: "VS1", color: "G", size: "7" }
 
     if (!selections) {
@@ -267,13 +278,36 @@ const calculatePrice = async (req, res) => {
 
     const pBasePrice = prod ? (prod.basePrice || 0) : (Number(basePrice) || 0);
     const pSilverBasePrice = prod ? (prod.silverBasePrice || 0) : (Number(silverBasePrice) || 0);
-    const pWeight = prod ? (prod.weight || 0) : (Number(weight) || 0);
-    const gstPercentage = prod ? (prod.gstPercentage || 3) : (Number(req.body.gstPercentage) || 3);
-    const diamondOptions = prod ? (prod.diamondOptions || []) : (req.body.diamondOptions || []);
-
+    
     const selectedMetalVal = selections.metal || "";
     const isSilver = selectedMetalVal.toLowerCase().includes("silver");
     const isPlatinum = selectedMetalVal.toLowerCase().includes("platinum");
+
+    let pWeight = 0;
+    if (selectedMetalVal) {
+      if (isSilver) {
+        pWeight = prod ? (prod.weightSilver || 0) : (Number(weightSilver) || 0);
+      } else if (isPlatinum) {
+        pWeight = prod ? (prod.weightPlatinum || 0) : (Number(weightPlatinum) || 0);
+      } else {
+        const parsed = parseMetalSelection(selectedMetalVal);
+        const purity = parsed.purity || "18K";
+        if (purity === "10K") {
+          pWeight = prod ? (prod.weight10K || 0) : (Number(weight10K) || 0);
+        } else if (purity === "14K") {
+          pWeight = prod ? (prod.weight14K || 0) : (Number(weight14K) || 0);
+        } else if (purity === "18K") {
+          pWeight = prod ? (prod.weight18K || 0) : (Number(weight18K) || 0);
+        } else {
+          pWeight = prod ? (prod.weight || 0) : (Number(weight) || 0);
+        }
+      }
+    } else {
+      pWeight = prod ? (prod.weight || 0) : (Number(weight) || 0);
+    }
+
+    const gstPercentage = prod ? (prod.gstPercentage || 3) : (Number(req.body.gstPercentage) || 3);
+    const diamondOptions = prod ? (prod.diamondOptions || []) : (req.body.diamondOptions || []);
 
     // 1. Calculate Metal Cost
     let metalPricePerGram = 0;

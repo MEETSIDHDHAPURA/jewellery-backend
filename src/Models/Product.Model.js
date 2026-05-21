@@ -76,6 +76,26 @@ const productSchema = new mongoose.Schema(
       type: Number, // Product weight in grams
       default: 0,
     },
+    weight10K: {
+      type: Number,
+      default: 0,
+    },
+    weight14K: {
+      type: Number,
+      default: 0,
+    },
+    weight18K: {
+      type: Number,
+      default: 0,
+    },
+    weightSilver: {
+      type: Number,
+      default: 0,
+    },
+    weightPlatinum: {
+      type: Number,
+      default: 0,
+    },
     allowedMetals: {
       type: [String],
       default: [],

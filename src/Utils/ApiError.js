@@ -4,6 +4,13 @@ class ApiError extends Error {
     this.statusCode = statusCode;
     this.message = message;
     this.errorData = errorData;
+
+    Object.defineProperty(this, "message", {
+      value: message,
+      enumerable: true,
+      configurable: true,
+      writable: true,
+    });
   }
 }
 

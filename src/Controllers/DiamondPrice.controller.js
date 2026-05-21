@@ -72,14 +72,68 @@ const bulkCreateDiamondPrices = async (req, res) => {
 const getDiamondPrices = async (req, res) => {
   try {
     const filter = {};
-    if (req.query.diamondType) filter.diamondType = req.query.diamondType;
-    if (req.query.shape) filter.shape = req.query.shape;
+    if (req.query.diamondType && req.query.diamondType !== "all") filter.diamondType = req.query.diamondType;
+    if (req.query.shape && req.query.shape !== "all") filter.shape = req.query.shape;
     if (req.query.carat) filter.carat = Number(req.query.carat);
-    if (req.query.clarity) filter.clarity = req.query.clarity;
-    if (req.query.color) filter.color = req.query.color;
+    if (req.query.clarity && req.query.clarity !== "all") filter.clarity = req.query.clarity;
+    if (req.query.color && req.query.color !== "all") filter.color = req.query.color;
 
-    const diamonds = await DiamondPrice.find(filter).sort({ diamondType: 1, shape: 1, carat: 1, color: 1, clarity: 1 });
-    res.status(200).json(new ApiResponse(200, diamonds, "Diamond prices fetched successfully"));
+    if (req.query.search && req.query.search.trim() !== "") {
+      const searchVal = req.query.search.trim();
+      const searchRegex = new RegExp(searchVal, "i");
+      const searchConditions = [
+        { diamondType: searchRegex },
+        { shape: searchRegex },
+        { clarity: searchRegex },
+        { color: searchRegex }
+      ];
+      const searchNum = Number(searchVal);
+      if (!isNaN(searchNum)) {
+        searchConditions.push({ carat: searchNum });
+      }
+      filter.$or = searchConditions;
+    }
+
+    // Pagination parameters
+    const page = parseInt(req.query.page, 10) || 1;
+    const limit = parseInt(req.query.limit, 10) || 20;
+    const skip = (page - 1) * limit;
+
+    const total = await DiamondPrice.countDocuments(filter);
+    const pages = Math.ceil(total / limit);
+
+    const diamonds = await DiamondPrice.find(filter)
+      .sort({ diamondType: 1, shape: 1, carat: 1, color: 1, clarity: 1 })
+      .skip(skip)
+      .limit(limit);
+
+    // Core statistics (overall/unfiltered for statistics cards)
+    const totalEntries = await DiamondPrice.countDocuments();
+    const uniqueShapesArray = await DiamondPrice.distinct("shape");
+    const uniqueColorsArray = await DiamondPrice.distinct("color");
+    const uniqueClaritiesArray = await DiamondPrice.distinct("clarity");
+
+    res.status(200).json(
+      new ApiResponse(
+        200,
+        {
+          diamonds,
+          pagination: {
+            total,
+            page,
+            limit,
+            pages,
+          },
+          stats: {
+            totalEntries,
+            uniqueShapes: uniqueShapesArray.length,
+            uniqueColors: uniqueColorsArray.length,
+            uniqueClarities: uniqueClaritiesArray.length,
+          },
+        },
+        "Diamond prices fetched successfully"
+      )
+    );
   } catch (error) {
     res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));
   }
@@ -99,6 +153,9 @@ const updateDiamondPrice = async (req, res) => {
 
     res.status(200).json(new ApiResponse(200, diamond, "Diamond price updated successfully"));
   } catch (error) {
+    if (error.code === 11000) {
+      return res.status(409).json(new ApiError(409, "Diamond is already exist"));
+    }
     res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));
   }
 };
