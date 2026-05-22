@@ -1,6 +1,7 @@
 const MakingCharge = require("../Models/MakingCharge.Model.js");
 const ApiResponse = require("../Utils/ApiResponse");
 const ApiError = require("../Utils/ApiError");
+const { recalculateAndSavePrices } = require("../Utils/Product.utils.js");
 
 // Create Making Charge
 const createMakingCharge = async (req, res) => {
@@ -23,6 +24,8 @@ const createMakingCharge = async (req, res) => {
       value: value || 0,
       updatedBy: req.user ? req.user._id : undefined,
     });
+
+    await recalculateAndSavePrices([metal]);
 
     res.status(201).json(new ApiResponse(201, charge, "Making charge created successfully"));
   } catch (error) {
@@ -73,6 +76,8 @@ const updateMakingCharge = async (req, res) => {
       throw new ApiError(404, "Making charge not found");
     }
 
+    await recalculateAndSavePrices([charge.metal]);
+
     res.status(200).json(new ApiResponse(200, charge, "Making charge updated successfully"));
   } catch (error) {
     res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));
@@ -86,6 +91,9 @@ const deleteMakingCharge = async (req, res) => {
     if (!charge) {
       throw new ApiError(404, "Making charge not found");
     }
+
+    await recalculateAndSavePrices([charge.metal]);
+
     res.status(200).json(new ApiResponse(200, {}, "Making charge deleted successfully"));
   } catch (error) {
     res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));
@@ -119,6 +127,8 @@ const setMargin = async (req, res) => {
       { key: "margin_percentage", value: Number(margin) },
       { upsert: true, new: true }
     );
+
+    await recalculateAndSavePrices();
 
     res.status(200).json(new ApiResponse(200, { margin: config.value }, "Margin updated successfully"));
   } catch (error) {

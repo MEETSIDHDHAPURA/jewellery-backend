@@ -1,4 +1,5 @@
 const MetalRate = require("../Models/MetalRate.Model.js");
+const { recalculateAndSavePrices } = require("../Utils/Product.utils.js");
 
 // Get all metal rates
 exports.getMetalRates = async (req, res) => {
@@ -32,6 +33,10 @@ exports.updateMetalRates = async (req, res) => {
         );
       })
     );
+
+    // Recalculate price of ONLY those products whose metal type is affected
+    const updatedMetals = [...new Set(rates.map(r => r.metal))];
+    await recalculateAndSavePrices(updatedMetals);
 
     res.status(200).json({ success: true, message: "Rates updated successfully", data: updatedRates });
   } catch (error) {
