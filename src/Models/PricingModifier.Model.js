@@ -9,6 +9,12 @@ const mongoose = require("mongoose");
  */
 const pricingModifierSchema = new mongoose.Schema(
   {
+    category: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Category",
+      required: true,
+      index: true,
+    },
     attributeType: {
       type: String,
       required: true,
@@ -48,7 +54,7 @@ const pricingModifierSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-// Compound unique index to prevent duplicate entries
-pricingModifierSchema.index({ attributeType: 1, value: 1 }, { unique: true });
+// Compound unique index to prevent duplicate entries per category
+pricingModifierSchema.index({ category: 1, attributeType: 1, value: 1 }, { unique: true });
 
 module.exports = mongoose.model("PricingModifier", pricingModifierSchema);

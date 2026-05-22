@@ -55,10 +55,6 @@ const productSchema = new mongoose.Schema(
       enum: ["fixed", "per_gram"],
       default: "per_gram",
     },
-    gstPercentage: {
-      type: Number,
-      default: 3, // Standard GST for jewellery in India
-    },
 
     // Scalable Options
     diamondOptions: [diamondOptionSchema],
@@ -133,7 +129,7 @@ const productSchema = new mongoose.Schema(
     
     occasion: {
       type: [String],
-      enum: ["Daily Wear", "Wedding", "Party Wear", "Engagement", "Work Wear", "Anniversary"],
+      enum: ["engagement", "anniversary", "Bridal", "every day wear", "festival"],
       default: [],
     },
     gender: {

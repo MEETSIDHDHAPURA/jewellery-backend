@@ -44,7 +44,7 @@ const createProduct = async (req, res) => {
   try {
     const {
       title, slug, description, category, makingCharge, makingChargeType,
-      gstPercentage, diamondOptions, variantConfig, specifications,
+      diamondOptions, variantConfig, specifications,
       occasion, gender, isFeatured, isActive, Price, discountedPrice,
       discountPercentage, basePrice, silverBasePrice, weight,
       weight10K, weight14K, weight18K, weightSilver, weightPlatinum,
@@ -91,7 +91,6 @@ const createProduct = async (req, res) => {
       category,
       makingCharge: parseNumber(makingCharge, 0),
       makingChargeType: makingChargeType || "per_gram",
-      gstPercentage: parseNumber(gstPercentage, 3),
       images,
       sizeChart,
       diamondOptions: safeParseJSON(diamondOptions, []),
@@ -146,10 +145,19 @@ const getAllProducts = async (req, res) => {
   try {
     const { 
       category, occasion, gender, metal, purity, minPrice, maxPrice, 
-      isFeatured, search, page = 1, limit = 10 
+      isFeatured, search, page = 1, limit = 10, isActive
     } = req.query;
 
-    const filter = { isDeleted: false, isActive: true };
+    const filter = { isDeleted: false };
+    if (isActive === 'all') {
+      // do not filter by isActive
+    } else if (isActive === 'false' || isActive === false) {
+      filter.isActive = false;
+    } else if (isActive === 'true' || isActive === true) {
+      filter.isActive = true;
+    } else {
+      filter.isActive = true;
+    }
 
     if (category) filter.category = category;
     if (gender) filter.gender = gender;
@@ -248,7 +256,6 @@ const updateProduct = async (req, res) => {
       "discountedPrice",
       "discountPercentage",
       "makingCharge",
-      "gstPercentage",
       "basePrice",
       "silverBasePrice",
       "weight",

@@ -10,7 +10,12 @@ const ApiError = require("../Utils/ApiError");
  */
 const getAllModifiers = async (req, res) => {
   try {
-    const modifiers = await PricingModifier.find({ isActive: true }).sort({
+    const { category } = req.query;
+    const filter = { isActive: true };
+    if (category) {
+      filter.category = category;
+    }
+    const modifiers = await PricingModifier.find(filter).sort({
       attributeType: 1,
       sortOrder: 1,
     });
@@ -25,7 +30,7 @@ const getAllModifiers = async (req, res) => {
     res
       .status(200)
       .json(
-        new ApiResponse(200, grouped, "Pricing modifiers fetched successfully")
+        new ApiResponse(200, grouped, "Size modifiers fetched successfully")
       );
   } catch (error) {
     res
@@ -39,7 +44,12 @@ const getAllModifiers = async (req, res) => {
  */
 const getAllModifiersFlat = async (req, res) => {
   try {
-    const modifiers = await PricingModifier.find().sort({
+    const { category } = req.query;
+    const filter = {};
+    if (category) {
+      filter.category = category;
+    }
+    const modifiers = await PricingModifier.find(filter).sort({
       attributeType: 1,
       sortOrder: 1,
     });
@@ -61,13 +71,14 @@ const getAllModifiersFlat = async (req, res) => {
  */
 const createModifier = async (req, res) => {
   try {
-    const { attributeType, value, label, modifierType, modifierValue, sortOrder } = req.body;
+    const { category, attributeType, value, label, modifierType, modifierValue, sortOrder } = req.body;
 
-    if (!attributeType || !value || !label || modifierValue === undefined) {
-      throw new ApiError(400, "attributeType, value, label, and modifierValue are required");
+    if (!category || !attributeType || !value || !label || modifierValue === undefined) {
+      throw new ApiError(400, "category, attributeType, value, label, and modifierValue are required");
     }
 
     const modifier = await PricingModifier.create({
+      category,
       attributeType,
       value,
       label,
@@ -86,7 +97,7 @@ const createModifier = async (req, res) => {
       return res
         .status(409)
         .json(
-          new ApiError(409, "A modifier with this attribute type and value already exists")
+          new ApiError(409, "A modifier with this category, attribute type and value already exists")
         );
     }
     res
@@ -142,78 +153,96 @@ const deleteModifier = async (req, res) => {
  */
 const seedDefaults = async (req, res) => {
   try {
-    const defaults = [
-      // ===== METALS (multiplier) =====
-      { attributeType: "metal", value: "925 Silver", label: "925 Silver", modifierType: "multiplier", modifierValue: 1.0, sortOrder: 1 },
-      { attributeType: "metal", value: "10K Yellow Gold", label: "10K Yellow Gold", modifierType: "multiplier", modifierValue: 2.1, sortOrder: 2 },
-      { attributeType: "metal", value: "10K White Gold", label: "10K White Gold", modifierType: "multiplier", modifierValue: 2.1, sortOrder: 3 },
-      { attributeType: "metal", value: "10K Rose Gold", label: "10K Rose Gold", modifierType: "multiplier", modifierValue: 2.2, sortOrder: 4 },
-      { attributeType: "metal", value: "14K Yellow Gold", label: "14K Yellow Gold", modifierType: "multiplier", modifierValue: 3.2, sortOrder: 5 },
-      { attributeType: "metal", value: "14K White Gold", label: "14K White Gold", modifierType: "multiplier", modifierValue: 3.2, sortOrder: 6 },
-      { attributeType: "metal", value: "14K Rose Gold", label: "14K Rose Gold", modifierType: "multiplier", modifierValue: 3.3, sortOrder: 7 },
-      { attributeType: "metal", value: "18K Yellow Gold", label: "18K Yellow Gold", modifierType: "multiplier", modifierValue: 4.5, sortOrder: 8 },
-      { attributeType: "metal", value: "18K White Gold", label: "18K White Gold", modifierType: "multiplier", modifierValue: 4.5, sortOrder: 9 },
-      { attributeType: "metal", value: "18K Rose Gold", label: "18K Rose Gold", modifierType: "multiplier", modifierValue: 4.6, sortOrder: 10 },
-      { attributeType: "metal", value: "Platinum 950", label: "Platinum 950", modifierType: "multiplier", modifierValue: 6.0, sortOrder: 11 },
+    const Category = require("../Models/Category.Model");
+    const { category } = req.body;
 
-      // ===== CARATS (multiplier) =====
-      { attributeType: "carat", value: "0.20ct", label: "0.20 Carat", modifierType: "multiplier", modifierValue: 1.0, sortOrder: 1 },
-      { attributeType: "carat", value: "0.30ct", label: "0.30 Carat", modifierType: "multiplier", modifierValue: 1.8, sortOrder: 2 },
-      { attributeType: "carat", value: "0.50ct", label: "0.50 Carat", modifierType: "multiplier", modifierValue: 3.2, sortOrder: 3 },
-      { attributeType: "carat", value: "0.70ct", label: "0.70 Carat", modifierType: "multiplier", modifierValue: 5.5, sortOrder: 4 },
-      { attributeType: "carat", value: "1.00ct", label: "1.00 Carat", modifierType: "multiplier", modifierValue: 8.5, sortOrder: 5 },
-      { attributeType: "carat", value: "1.50ct", label: "1.50 Carat", modifierType: "multiplier", modifierValue: 18.0, sortOrder: 6 },
-      { attributeType: "carat", value: "2.00ct", label: "2.00 Carat", modifierType: "multiplier", modifierValue: 32.0, sortOrder: 7 },
+    let targetCategories = [];
+    if (category) {
+      const catDoc = await Category.findById(category);
+      if (!catDoc) {
+        throw new ApiError(404, "Selected category not found");
+      }
+      targetCategories = [catDoc];
+    } else {
+      targetCategories = await Category.find({ isActive: true });
+    }
 
-      // ===== CLARITY (flat_add — $5 reduction per step from IF) =====
-      { attributeType: "clarity", value: "IF", label: "IF (Internally Flawless)", modifierType: "flat_add", modifierValue: 0, sortOrder: 1 },
-      { attributeType: "clarity", value: "VVS1", label: "VVS1", modifierType: "flat_add", modifierValue: -5, sortOrder: 2 },
-      { attributeType: "clarity", value: "VVS2", label: "VVS2", modifierType: "flat_add", modifierValue: -10, sortOrder: 3 },
-      { attributeType: "clarity", value: "VS1", label: "VS1", modifierType: "flat_add", modifierValue: -15, sortOrder: 4 },
-      { attributeType: "clarity", value: "VS2", label: "VS2", modifierType: "flat_add", modifierValue: -20, sortOrder: 5 },
-      { attributeType: "clarity", value: "SI1", label: "SI1", modifierType: "flat_add", modifierValue: -25, sortOrder: 6 },
-      { attributeType: "clarity", value: "SI2", label: "SI2", modifierType: "flat_add", modifierValue: -30, sortOrder: 7 },
+    if (targetCategories.length === 0) {
+      throw new ApiError(404, "No active categories found to seed defaults for");
+    }
 
-      // ===== COLOR (flat_add — $5 reduction per step from D) =====
-      { attributeType: "color", value: "D", label: "D (Colorless)", modifierType: "flat_add", modifierValue: 0, sortOrder: 1 },
-      { attributeType: "color", value: "E", label: "E (Colorless)", modifierType: "flat_add", modifierValue: -5, sortOrder: 2 },
-      { attributeType: "color", value: "F", label: "F (Colorless)", modifierType: "flat_add", modifierValue: -10, sortOrder: 3 },
-      { attributeType: "color", value: "G", label: "G (Near Colorless)", modifierType: "flat_add", modifierValue: -15, sortOrder: 4 },
-      { attributeType: "color", value: "H", label: "H (Near Colorless)", modifierType: "flat_add", modifierValue: -20, sortOrder: 5 },
-      { attributeType: "color", value: "I", label: "I (Near Colorless)", modifierType: "flat_add", modifierValue: -25, sortOrder: 6 },
-      { attributeType: "color", value: "J", label: "J (Near Colorless)", modifierType: "flat_add", modifierValue: -30, sortOrder: 7 },
+    let totalSeeded = 0;
+    for (const cat of targetCategories) {
+      const catId = cat._id.toString();
+      const catName = (cat.name || "").toLowerCase();
+      const isRing = catName === "ring" || catName === "rings";
 
-      // ===== SIZES (flat_add) =====
-      { attributeType: "size", value: "4", label: "Size 4", modifierType: "flat_add", modifierValue: 0, sortOrder: 1 },
-      { attributeType: "size", value: "4.5", label: "Size 4.5", modifierType: "flat_add", modifierValue: 0, sortOrder: 2 },
-      { attributeType: "size", value: "5", label: "Size 5", modifierType: "flat_add", modifierValue: 0, sortOrder: 3 },
-      { attributeType: "size", value: "5.5", label: "Size 5.5", modifierType: "flat_add", modifierValue: 0, sortOrder: 4 },
-      { attributeType: "size", value: "6", label: "Size 6", modifierType: "flat_add", modifierValue: 0, sortOrder: 5 },
-      { attributeType: "size", value: "6.5", label: "Size 6.5", modifierType: "flat_add", modifierValue: 0, sortOrder: 6 },
-      { attributeType: "size", value: "7", label: "Size 7", modifierType: "flat_add", modifierValue: 0, sortOrder: 7 },
-      { attributeType: "size", value: "7.5", label: "Size 7.5", modifierType: "flat_add", modifierValue: 0, sortOrder: 8 },
-      { attributeType: "size", value: "8", label: "Size 8", modifierType: "flat_add", modifierValue: 0, sortOrder: 9 },
-      { attributeType: "size", value: "8.5", label: "Size 8.5", modifierType: "flat_add", modifierValue: 200, sortOrder: 10 },
-      { attributeType: "size", value: "9", label: "Size 9", modifierType: "flat_add", modifierValue: 300, sortOrder: 11 },
-      { attributeType: "size", value: "9.5", label: "Size 9.5", modifierType: "flat_add", modifierValue: 500, sortOrder: 12 },
-      { attributeType: "size", value: "10", label: "Size 10", modifierType: "flat_add", modifierValue: 500, sortOrder: 13 },
-    ];
+      // Delete existing modifiers for this category to avoid mixed values (like old sizes)
+      await PricingModifier.deleteMany({ category: catId });
 
-    // Use upsert to avoid duplicates on re-seed
-    const results = [];
-    for (const mod of defaults) {
-      const result = await PricingModifier.findOneAndUpdate(
-        { attributeType: mod.attributeType, value: mod.value },
-        mod,
-        { upsert: true, new: true }
-      );
-      results.push(result);
+      const dynamicDefaults = [
+        // ===== CARATS (multiplier) =====
+        { category: catId, attributeType: "carat", value: "0.20ct", label: "0.20 Carat", modifierType: "multiplier", modifierValue: 1.0, sortOrder: 1 },
+        { category: catId, attributeType: "carat", value: "0.30ct", label: "0.30 Carat", modifierType: "multiplier", modifierValue: 1.8, sortOrder: 2 },
+        { category: catId, attributeType: "carat", value: "0.50ct", label: "0.50 Carat", modifierType: "multiplier", modifierValue: 3.2, sortOrder: 3 },
+        { category: catId, attributeType: "carat", value: "0.70ct", label: "0.70 Carat", modifierType: "multiplier", modifierValue: 5.5, sortOrder: 4 },
+        { category: catId, attributeType: "carat", value: "1.00ct", label: "1.00 Carat", modifierType: "multiplier", modifierValue: 8.5, sortOrder: 5 },
+        { category: catId, attributeType: "carat", value: "1.50ct", label: "1.50 Carat", modifierType: "multiplier", modifierValue: 18.0, sortOrder: 6 },
+        { category: catId, attributeType: "carat", value: "2.00ct", label: "2.00 Carat", modifierType: "multiplier", modifierValue: 32.0, sortOrder: 7 },
+
+        // ===== CLARITY (flat_add — $5 reduction per step from IF) =====
+        { category: catId, attributeType: "clarity", value: "IF", label: "IF (Internally Flawless)", modifierType: "flat_add", modifierValue: 0, sortOrder: 1 },
+        { category: catId, attributeType: "clarity", value: "VVS1", label: "VVS1", modifierType: "flat_add", modifierValue: -5, sortOrder: 2 },
+        { category: catId, attributeType: "clarity", value: "VVS2", label: "VVS2", modifierType: "flat_add", modifierValue: -10, sortOrder: 3 },
+        { category: catId, attributeType: "clarity", value: "VS1", label: "VS1", modifierType: "flat_add", modifierValue: -15, sortOrder: 4 },
+        { category: catId, attributeType: "clarity", value: "VS2", label: "VS2", modifierType: "flat_add", modifierValue: -20, sortOrder: 5 },
+        { category: catId, attributeType: "clarity", value: "SI1", label: "SI1", modifierType: "flat_add", modifierValue: -25, sortOrder: 6 },
+        { category: catId, attributeType: "clarity", value: "SI2", label: "SI2", modifierType: "flat_add", modifierValue: -30, sortOrder: 7 },
+
+        // ===== COLOR (flat_add — $5 reduction per step from D) =====
+        { category: catId, attributeType: "color", value: "D", label: "D (Colorless)", modifierType: "flat_add", modifierValue: 0, sortOrder: 1 },
+        { category: catId, attributeType: "color", value: "E", label: "E (Colorless)", modifierType: "flat_add", modifierValue: -5, sortOrder: 2 },
+        { category: catId, attributeType: "color", value: "F", label: "F (Colorless)", modifierType: "flat_add", modifierValue: -10, sortOrder: 3 },
+        { category: catId, attributeType: "color", value: "G", label: "G (Near Colorless)", modifierType: "flat_add", modifierValue: -15, sortOrder: 4 },
+        { category: catId, attributeType: "color", value: "H", label: "H (Near Colorless)", modifierType: "flat_add", modifierValue: -20, sortOrder: 5 },
+        { category: catId, attributeType: "color", value: "I", label: "I (Near Colorless)", modifierType: "flat_add", modifierValue: -25, sortOrder: 6 },
+        { category: catId, attributeType: "color", value: "J", label: "J (Near Colorless)", modifierType: "flat_add", modifierValue: -30, sortOrder: 7 },
+      ];
+
+      if (isRing) {
+        dynamicDefaults.push(
+          { category: catId, attributeType: "size", value: "4", label: "Size 4", modifierType: "flat_add", modifierValue: 0, sortOrder: 1 },
+          { category: catId, attributeType: "size", value: "4.5", label: "Size 4.5", modifierType: "flat_add", modifierValue: 0, sortOrder: 2 },
+          { category: catId, attributeType: "size", value: "5", label: "Size 5", modifierType: "flat_add", modifierValue: 0, sortOrder: 3 },
+          { category: catId, attributeType: "size", value: "5.5", label: "Size 5.5", modifierType: "flat_add", modifierValue: 0, sortOrder: 4 },
+          { category: catId, attributeType: "size", value: "6", label: "Size 6", modifierType: "flat_add", modifierValue: 0, sortOrder: 5 },
+          { category: catId, attributeType: "size", value: "6.5", label: "Size 6.5", modifierType: "flat_add", modifierValue: 0, sortOrder: 6 },
+          { category: catId, attributeType: "size", value: "7", label: "Size 7", modifierType: "flat_add", modifierValue: 0, sortOrder: 7 },
+          { category: catId, attributeType: "size", value: "7.5", label: "Size 7.5", modifierType: "flat_add", modifierValue: 0, sortOrder: 8 },
+          { category: catId, attributeType: "size", value: "8", label: "Size 8", modifierType: "flat_add", modifierValue: 0, sortOrder: 9 },
+          { category: catId, attributeType: "size", value: "8.5", label: "Size 8.5", modifierType: "flat_add", modifierValue: 200, sortOrder: 10 },
+          { category: catId, attributeType: "size", value: "9", label: "Size 9", modifierType: "flat_add", modifierValue: 300, sortOrder: 11 },
+          { category: catId, attributeType: "size", value: "9.5", label: "Size 9.5", modifierType: "flat_add", modifierValue: 500, sortOrder: 12 },
+          { category: catId, attributeType: "size", value: "10", label: "Size 10", modifierType: "flat_add", modifierValue: 500, sortOrder: 13 }
+        );
+      } else {
+        dynamicDefaults.push(
+          { category: catId, attributeType: "size", value: "Extra small (xs)", label: "Extra small (xs)", modifierType: "flat_add", modifierValue: 0, sortOrder: 1 },
+          { category: catId, attributeType: "size", value: "small (s)", label: "small (s)", modifierType: "flat_add", modifierValue: 0, sortOrder: 2 },
+          { category: catId, attributeType: "size", value: "medium (m)", label: "medium (m)", modifierType: "flat_add", modifierValue: 0, sortOrder: 3 },
+          { category: catId, attributeType: "size", value: "large (l)", label: "large (l)", modifierType: "flat_add", modifierValue: 0, sortOrder: 4 },
+          { category: catId, attributeType: "size", value: "Extra large (xl)", label: "Extra large (xl)", modifierType: "flat_add", modifierValue: 0, sortOrder: 5 }
+        );
+      }
+
+      await PricingModifier.insertMany(dynamicDefaults);
+      totalSeeded += dynamicDefaults.length;
     }
 
     res
       .status(200)
       .json(
-        new ApiResponse(200, { count: results.length }, `${results.length} default modifiers seeded successfully`)
+        new ApiResponse(200, { count: totalSeeded }, `${totalSeeded} default modifiers seeded successfully`)
       );
   } catch (error) {
     res
@@ -272,8 +301,12 @@ const calculatePrice = async (req, res) => {
     }
 
     let prod = null;
+    let categoryId = req.body.category;
     if (productId) {
       prod = await Product.findById(productId);
+      if (prod) {
+        categoryId = prod.category;
+      }
     }
 
     const pBasePrice = prod ? (prod.basePrice || 0) : (Number(basePrice) || 0);
@@ -372,6 +405,7 @@ const calculatePrice = async (req, res) => {
     let colorModifier = 0;
     if (selectedColor) {
       const modifier = await PricingModifier.findOne({
+        category: categoryId,
         attributeType: "color",
         value: selectedColor,
         isActive: true,
@@ -385,6 +419,7 @@ const calculatePrice = async (req, res) => {
     let clarityModifier = 0;
     if (selectedClarity) {
       const modifier = await PricingModifier.findOne({
+        category: categoryId,
         attributeType: "clarity",
         value: selectedClarity,
         isActive: true,
@@ -398,6 +433,7 @@ const calculatePrice = async (req, res) => {
     let sizeModifier = 0;
     if (selections.size) {
       const modifier = await PricingModifier.findOne({
+        category: categoryId,
         attributeType: "size",
         value: selections.size,
         isActive: true,
