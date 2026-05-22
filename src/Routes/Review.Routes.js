@@ -4,6 +4,9 @@ const upload = require("../Middlewares/multer.middleware");
 
 const router = express.Router();
 
+// Route to get all reviews (globally for admin)
+router.get("/all", reviewController.getAllReviews);
+
 // Route to get all reviews for a specific product
 router.get("/:productId", reviewController.getProductReviews);
 

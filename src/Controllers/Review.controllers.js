@@ -107,9 +107,25 @@ const updateReview = async (req, res) => {
   }
 };
 
+// Get all reviews
+const getAllReviews = async (req, res) => {
+  try {
+    const reviews = await Review.find()
+      .populate("user", "name email avatar")
+      .populate("product", "title images Price")
+      .sort({ createdAt: -1 });
+
+    res.status(200).json(new ApiResponse(200, reviews, "All reviews fetched successfully"));
+  } catch (error) {
+    res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));
+  }
+};
+
 module.exports = {
   createReview,
   getProductReviews,
   deleteReview,
-  updateReview
+  updateReview,
+  getAllReviews
 };
+
