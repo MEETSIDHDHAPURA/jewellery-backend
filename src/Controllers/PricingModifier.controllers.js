@@ -289,6 +289,7 @@ const calculatePrice = async (req, res) => {
       weight10K,
       weight14K,
       weight18K,
+      weight22K,
       weightSilver,
       weightPlatinum,
       selections,
@@ -331,6 +332,8 @@ const calculatePrice = async (req, res) => {
           pWeight = prod ? (prod.weight14K || 0) : (Number(weight14K) || 0);
         } else if (purity === "18K") {
           pWeight = prod ? (prod.weight18K || 0) : (Number(weight18K) || 0);
+        } else if (purity === "22K") {
+          pWeight = prod ? (prod.weight22K || 0) : (Number(weight22K) || 0);
         } else {
           pWeight = prod ? (prod.weight || 0) : (Number(weight) || 0);
         }

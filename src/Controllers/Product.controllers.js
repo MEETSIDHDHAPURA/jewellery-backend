@@ -47,7 +47,7 @@ const createProduct = async (req, res) => {
       diamondOptions, variantConfig, specifications,
       occasion, gender, isFeatured, isActive, Price, discountedPrice,
       discountPercentage, basePrice, silverBasePrice, weight,
-      weight10K, weight14K, weight18K, weightSilver, weightPlatinum,
+      weight10K, weight14K, weight18K, weight22K, weightSilver, weightPlatinum,
       allowedMetals, allowedCarats, allowedClarities, allowedColors, allowedSizes,
       metaTitle, metaDescription, keywords
     } = req.body;
@@ -108,6 +108,7 @@ const createProduct = async (req, res) => {
       weight10K: parseNumber(weight10K, 0),
       weight14K: parseNumber(weight14K, 0),
       weight18K: parseNumber(weight18K, 0),
+      weight22K: parseNumber(weight22K, 0),
       weightSilver: parseNumber(weightSilver, 0),
       weightPlatinum: parseNumber(weightPlatinum, 0),
       allowedMetals: safeParseJSON(allowedMetals, []),
@@ -262,6 +263,7 @@ const updateProduct = async (req, res) => {
       "weight10K",
       "weight14K",
       "weight18K",
+      "weight22K",
       "weightSilver",
       "weightPlatinum"
     ];
