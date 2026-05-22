@@ -33,6 +33,11 @@ const diamondPriceSchema = new mongoose.Schema(
       required: true,
       default: 0,
     },
+    stock: {
+      type: Number,
+      required: true,
+      default: 0,
+    },
     isActive: {
       type: Boolean,
       default: true,

@@ -5,6 +5,38 @@ const ApiError = require("../Utils/ApiError");
 const { generateVariantCombinations } = require("../Utils/Product.utils");
 const fs = require("fs");
 
+// Helper to safely parse JSON strings sent via multipart/form-data
+const safeParseJSON = (value, fallback = []) => {
+  if (value === undefined || value === null || value === "") return fallback;
+  if (typeof value !== "string") return value;
+  try {
+    return JSON.parse(value);
+  } catch (error) {
+    if (value.startsWith("[") || value.startsWith("{")) {
+      return fallback;
+    }
+    return value ? [value] : fallback;
+  }
+};
+
+// Helper to safely convert string to number
+const parseNumber = (val, defaultVal = 0) => {
+  if (val === undefined || val === null || val === "") return defaultVal;
+  const num = Number(val);
+  return isNaN(num) ? defaultVal : num;
+};
+
+// Helper to safely parse boolean values
+const parseBoolean = (val, defaultVal = false) => {
+  if (val === undefined || val === null || val === "") return defaultVal;
+  if (typeof val === "boolean") return val;
+  if (typeof val === "string") {
+    if (val.toLowerCase() === "true") return true;
+    if (val.toLowerCase() === "false") return false;
+  }
+  return !!val;
+};
+
 /**
  * Create Product with Variants
  */
@@ -15,7 +47,9 @@ const createProduct = async (req, res) => {
       gstPercentage, diamondOptions, variantConfig, specifications,
       occasion, gender, isFeatured, isActive, Price, discountedPrice,
       discountPercentage, basePrice, silverBasePrice, weight,
-      weight10K, weight14K, weight18K, weightSilver, weightPlatinum
+      weight10K, weight14K, weight18K, weightSilver, weightPlatinum,
+      allowedMetals, allowedCarats, allowedClarities, allowedColors, allowedSizes,
+      metaTitle, metaDescription, keywords
     } = req.body;
 
     let images = [];
@@ -30,16 +64,61 @@ const createProduct = async (req, res) => {
       }
     }
 
+    // Auto-generate unique slug if not provided
+    let finalSlug = slug;
+    if (!finalSlug && title) {
+      finalSlug = title
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/(^-|-$)+/g, "");
+      
+      const existingProduct = await Product.findOne({ slug: finalSlug });
+      if (existingProduct) {
+        finalSlug = `${finalSlug}-${Math.random().toString(36).substring(2, 7)}`;
+      }
+    } else if (finalSlug) {
+      finalSlug = finalSlug
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/(^-|-$)+/g, "");
+    }
+
     // 1. Create Base Product
     const product = await Product.create({
-      title, slug, description, category, makingCharge, makingChargeType,
-      gstPercentage, images, sizeChart,
-      diamondOptions: typeof diamondOptions === "string" ? JSON.parse(diamondOptions) : diamondOptions,
-      specifications: typeof specifications === "string" ? JSON.parse(specifications) : specifications,
-      occasion: typeof occasion === "string" ? JSON.parse(occasion) : occasion,
-      gender, isFeatured, isActive, Price, discountedPrice, discountPercentage,
-      basePrice, silverBasePrice, weight,
-      weight10K, weight14K, weight18K, weightSilver, weightPlatinum
+      title,
+      slug: finalSlug,
+      description,
+      category,
+      makingCharge: parseNumber(makingCharge, 0),
+      makingChargeType: makingChargeType || "per_gram",
+      gstPercentage: parseNumber(gstPercentage, 3),
+      images,
+      sizeChart,
+      diamondOptions: safeParseJSON(diamondOptions, []),
+      specifications: safeParseJSON(specifications, {}),
+      occasion: safeParseJSON(occasion, []),
+      gender: gender || "Women",
+      isFeatured: parseBoolean(isFeatured, false),
+      isActive: parseBoolean(isActive, true),
+      Price: parseNumber(Price, 0),
+      discountedPrice: parseNumber(discountedPrice, 0),
+      discountPercentage: parseNumber(discountPercentage, 0),
+      basePrice: parseNumber(basePrice, 0),
+      silverBasePrice: parseNumber(silverBasePrice, 0),
+      weight: parseNumber(weight, 0),
+      weight10K: parseNumber(weight10K, 0),
+      weight14K: parseNumber(weight14K, 0),
+      weight18K: parseNumber(weight18K, 0),
+      weightSilver: parseNumber(weightSilver, 0),
+      weightPlatinum: parseNumber(weightPlatinum, 0),
+      allowedMetals: safeParseJSON(allowedMetals, []),
+      allowedCarats: safeParseJSON(allowedCarats, []),
+      allowedClarities: safeParseJSON(allowedClarities, []),
+      allowedColors: safeParseJSON(allowedColors, []),
+      allowedSizes: safeParseJSON(allowedSizes, []),
+      metaTitle,
+      metaDescription,
+      keywords: safeParseJSON(keywords, [])
     });
 
     // 2. Generate and Create Variants if config is provided
@@ -146,14 +225,79 @@ const getProductById = async (req, res) => {
 const updateProduct = async (req, res) => {
   try {
     const { id } = req.params;
-    const updateData = { ...req.body };
+    const rawBody = { ...req.body };
+    const updateData = {};
 
-    // Handle JSON parsing for multipart data
-    ["diamondOptions", "specifications", "occasion", "variants"].forEach(key => {
-      if (typeof updateData[key] === "string") {
-        updateData[key] = JSON.parse(updateData[key]);
+    // 1. Array and Object fields parsing
+    const jsonFields = [
+      "diamondOptions",
+      "specifications",
+      "occasion",
+      "variants",
+      "allowedMetals",
+      "allowedCarats",
+      "allowedClarities",
+      "allowedColors",
+      "allowedSizes",
+      "keywords"
+    ];
+
+    // 2. Number fields parsing
+    const numberFields = [
+      "Price",
+      "discountedPrice",
+      "discountPercentage",
+      "makingCharge",
+      "gstPercentage",
+      "basePrice",
+      "silverBasePrice",
+      "weight",
+      "weight10K",
+      "weight14K",
+      "weight18K",
+      "weightSilver",
+      "weightPlatinum"
+    ];
+
+    // 3. Boolean fields parsing
+    const booleanFields = [
+      "isFeatured",
+      "isActive",
+      "isDeleted"
+    ];
+
+    // Process all keys in req.body
+    Object.keys(rawBody).forEach(key => {
+      if (jsonFields.includes(key)) {
+        const fallback = key === "specifications" ? {} : [];
+        updateData[key] = safeParseJSON(rawBody[key], fallback);
+      } else if (numberFields.includes(key)) {
+        updateData[key] = parseNumber(rawBody[key], 0);
+      } else if (booleanFields.includes(key)) {
+        updateData[key] = parseBoolean(rawBody[key], false);
+      } else {
+        updateData[key] = rawBody[key];
       }
     });
+
+    // Handle slug formatting if updated
+    if (updateData.slug) {
+      updateData.slug = updateData.slug
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/(^-|-$)+/g, "");
+    } else if (updateData.title && updateData.slug === "") {
+      let generatedSlug = updateData.title
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/(^-|-$)+/g, "");
+      
+      const existingProduct = await Product.findOne({ slug: generatedSlug, _id: { $ne: id } });
+      if (existingProduct) {
+        generatedSlug = `${generatedSlug}-${Math.random().toString(36).substring(2, 7)}`;
+      }
+      updateData.slug = generatedSlug;
+    }
 
     if (req.files) {
       if (req.files.images) {
