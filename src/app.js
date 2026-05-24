@@ -9,7 +9,6 @@ const orderRoutes = require("./Routes/Order.Routes");
 const blogRoutes = require("./Routes/Blog.Routes");
 const couponRoutes = require("./Routes/Coupon.Routes");
 const policyRoutes = require("./Routes/Policy.Routes");
-const looseDiamondRoutes = require("./Routes/LooseDiamond.Routes");
 const navigationRoutes = require("./Routes/Navigation.Routes");
 const reviewRoutes = require("./Routes/Review.Routes");
 const metalRateRoutes = require("./Routes/MetalRate.routes");
@@ -18,6 +17,8 @@ const makingChargeRoutes = require("./Routes/MakingCharge.routes");
 const supportRoutes = require("./Routes/Support.Routes");
 const pricingModifierRoutes = require("./Routes/PricingModifier.Routes");
 const diamondPriceRoutes = require("./Routes/DiamondPrice.routes");
+const bannerRoutes = require("./Routes/Banner.Routes");
+const homepageSectionRoutes = require("./Routes/LandingPage.Routes");
 
 app.use(
   cors({
@@ -40,7 +41,6 @@ app.use("/api/v1/order", orderRoutes);
 app.use("/api/v1/blog", blogRoutes);
 app.use("/api/v1/coupon", couponRoutes);
 app.use("/api/v1/policy", policyRoutes);
-app.use("/api/v1/loose-diamond", looseDiamondRoutes);
 app.use("/api/v1/navigation", navigationRoutes);
 app.use("/api/v1/review", reviewRoutes);
 app.use("/api/v1/metal-rate", metalRateRoutes);
@@ -49,5 +49,8 @@ app.use("/api/v1/making-charge", makingChargeRoutes);
 app.use("/api/v1/support", supportRoutes);
 app.use("/api/v1/pricing-modifier", pricingModifierRoutes);
 app.use("/api/v1/diamond-price", diamondPriceRoutes);
+app.use("/api/v1/banner", bannerRoutes);
+app.use("/admin", homepageSectionRoutes);
+app.use("/api/v1/admin", homepageSectionRoutes);
 
 module.exports = app;

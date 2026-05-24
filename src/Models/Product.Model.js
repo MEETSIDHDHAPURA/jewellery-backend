@@ -25,7 +25,10 @@ const productSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
-    // Base prices for quick listing/searching
+    subCategory: {
+      type: String,
+      trim: true,
+    },
     Price: {
       type: Number,
       required: true,
@@ -43,6 +46,9 @@ const productSchema = new mongoose.Schema(
       type: [String],
     },
     sizeChart: {
+      type: String, // URL for Image/PDF
+    },
+    certificate: {
       type: String, // URL for Image/PDF
     },
     makingCharge: {
@@ -66,10 +72,6 @@ const productSchema = new mongoose.Schema(
     },
     silverBasePrice: {
       type: Number, // Silver Making Cost
-      default: 0,
-    },
-    weight: {
-      type: Number, // Product weight in grams
       default: 0,
     },
     weight10K: {
@@ -116,21 +118,17 @@ const productSchema = new mongoose.Schema(
       type: [String],
       default: [],
     },
-    
-    // Referenced Variants for Inventory/SKU management (legacy support)
     variants: [
       {
         type: mongoose.Schema.Types.ObjectId,
         ref: "ProductVariant",
       },
     ],
-
     specifications: {
       dimensions: String,
       stoneDetails: String,
       certification: String, // e.g., "SGL", "IGI", "BIS Hallmark"
     },
-    
     occasion: {
       type: [String],
       enum: ["engagement", "anniversary", "Bridal", "every day wear", "festival"],
@@ -141,8 +139,6 @@ const productSchema = new mongoose.Schema(
       enum: ["Women", "Men", "Unisex", "Kids"],
       default: "Women",
     },
-
-    // SEO & Marketing
     metaTitle: String,
     metaDescription: String,
     keywords: [String],

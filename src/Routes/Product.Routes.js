@@ -9,6 +9,7 @@ router.post(
   upload.fields([
     { name: "images", maxCount: 10 },
     { name: "sizeChart", maxCount: 1 },
+    { name: "certificate", maxCount: 1 },
   ]),
   productController.createProduct
 );
@@ -18,6 +19,7 @@ router.post(
   upload.fields([
     { name: "images", maxCount: 10 },
     { name: "sizeChart", maxCount: 1 },
+    { name: "certificate", maxCount: 1 },
   ]),
   productController.createProduct
 );
@@ -34,6 +36,7 @@ router.put(
   upload.fields([
     { name: "images", maxCount: 10 },
     { name: "sizeChart", maxCount: 1 },
+    { name: "certificate", maxCount: 1 },
   ]),
   productController.updateProduct
 );
@@ -43,6 +46,7 @@ router.put(
   upload.fields([
     { name: "images", maxCount: 10 },
     { name: "sizeChart", maxCount: 1 },
+    { name: "certificate", maxCount: 1 },
   ]),
   productController.updateProduct
 );

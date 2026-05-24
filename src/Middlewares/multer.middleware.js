@@ -20,14 +20,14 @@ const upload = multer({
   storage: storage,
   limits: { fileSize: 100 * 1024 * 1024 }, // 100MB limit
   fileFilter: (req, file, cb) => {
-    const fileTypes = /jpeg|jpg|png|webp|pdf/;
+    const fileTypes = /jpeg|jpg|png|webp|pdf|mp4|webm|mov|avi|mkv/;
     const extname = fileTypes.test(path.extname(file.originalname).toLowerCase());
-    const mimetype = fileTypes.test(file.mimetype) || file.mimetype === "application/pdf";
+    const mimetype = fileTypes.test(file.mimetype) || file.mimetype === "application/pdf" || file.mimetype.startsWith("video/");
 
-    if (extname && (mimetype || file.mimetype === "application/pdf")) {
+    if (extname && (mimetype || file.mimetype === "application/pdf" || file.mimetype.startsWith("video/"))) {
       return cb(null, true);
     } else {
-      cb(new Error("Only images (jpeg, jpg, png, webp) and PDFs are allowed"));
+      cb(new Error("Only images (jpeg, jpg, png, webp), PDFs and videos (mp4, webm, mov, avi, mkv) are allowed"));
     }
   },
 });

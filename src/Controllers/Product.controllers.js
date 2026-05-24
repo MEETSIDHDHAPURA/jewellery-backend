@@ -37,23 +37,108 @@ const parseBoolean = (val, defaultVal = false) => {
   return !!val;
 };
 
+const populatePricingAndDiamonds = async (productData, body, productId = null) => {
+  // 1. Populate makingCharge, basePrice, and silverBasePrice from MakingCharge collection
+  try {
+    const MakingCharge = require("../Models/MakingCharge.Model");
+    const goldCharge = await MakingCharge.findOne({ metal: "Yellow Gold" });
+    const silverCharge = await MakingCharge.findOne({ metal: "Silver" });
+
+    if (goldCharge) productData.basePrice = goldCharge.value || 0;
+    if (silverCharge) productData.silverBasePrice = silverCharge.value || 0;
+
+    const allowedMetals = typeof productData.allowedMetals === "string" ? safeParseJSON(productData.allowedMetals, []) : (productData.allowedMetals || []);
+    const selectedMetalVal = allowedMetals && allowedMetals[0] ? allowedMetals[0] : "";
+    if (selectedMetalVal) {
+      const isSilver = selectedMetalVal.toLowerCase().includes("silver");
+      const isPlatinum = selectedMetalVal.toLowerCase().includes("platinum");
+      let searchMetal = "Yellow Gold";
+      if (isSilver) searchMetal = "Silver";
+      else if (isPlatinum) searchMetal = "Platinum";
+      else if (selectedMetalVal.toLowerCase().includes("white")) searchMetal = "White Gold";
+      else if (selectedMetalVal.toLowerCase().includes("rose")) searchMetal = "Rose Gold";
+      else searchMetal = "Yellow Gold";
+
+      const primaryCharge = await MakingCharge.findOne({ metal: searchMetal });
+      if (primaryCharge) {
+        productData.makingCharge = primaryCharge.value || 0;
+        productData.makingChargeType = "per_gram";
+      }
+    }
+  } catch (err) {
+    console.error("Error populating making charges:", err);
+  }
+
+  // 2. Populate diamondOptions based on allowed attributes and selections
+  try {
+    let diamondType = body.diamondType;
+    let diamondShape = body.diamondShape;
+    let allowedCarats = typeof body.allowedCarats === "string" ? safeParseJSON(body.allowedCarats, []) : (body.allowedCarats || []);
+    let allowedClarities = typeof body.allowedClarities === "string" ? safeParseJSON(body.allowedClarities, []) : (body.allowedClarities || []);
+    let allowedColors = typeof body.allowedColors === "string" ? safeParseJSON(body.allowedColors, []) : (body.allowedColors || []);
+
+    if (productId && (!diamondType || !diamondShape || allowedCarats.length === 0)) {
+      const Product = require("../Models/Product.Model");
+      const existing = await Product.findById(productId);
+      if (existing) {
+        if (!diamondType) diamondType = existing.diamondOptions && existing.diamondOptions[0] ? existing.diamondOptions[0].diamondType : "";
+        if (!diamondShape) {
+          const shapes = ["Round", "Oval", "Cushion", "Princess", "Pear", "Radiant", "Emerald", "Marquise", "Heart", "Asscher"];
+          diamondShape = shapes.find(s => existing.title.toLowerCase().includes(s.toLowerCase())) || "Round";
+        }
+        if (allowedCarats.length === 0) allowedCarats = existing.allowedCarats || [];
+        if (allowedClarities.length === 0) allowedClarities = existing.allowedClarities || [];
+        if (allowedColors.length === 0) allowedColors = existing.allowedColors || [];
+      }
+    }
+
+    if (diamondType && diamondShape && allowedCarats.length > 0) {
+      const DiamondPrice = require("../Models/DiamondPrice.Model");
+      
+      const caratNumbers = allowedCarats.map(c => Number(c) || parseFloat(c));
+
+      const matchingDiamonds = await DiamondPrice.find({
+        diamondType: { $regex: new RegExp(`^${diamondType}$`, "i") },
+        shape: { $regex: new RegExp(`^${diamondShape}$`, "i") },
+        carat: { $in: caratNumbers },
+        clarity: { $in: allowedClarities },
+        color: { $in: allowedColors }
+      });
+
+      if (matchingDiamonds && matchingDiamonds.length > 0) {
+        productData.diamondOptions = matchingDiamonds.map(d => ({
+          diamondType: d.diamondType,
+          carat: d.carat.toString(),
+          clarity: d.clarity,
+          color: d.color,
+          additionalPrice: d.price || 0,
+          isActive: true
+        }));
+      }
+    }
+  } catch (err) {
+    console.error("Error populating diamond options:", err);
+  }
+};
+
 /**
  * Create Product with Variants
  */
 const createProduct = async (req, res) => {
   try {
     const {
-      title, slug, description, category, makingCharge, makingChargeType,
+      title, slug, description, category, subCategory, makingCharge, makingChargeType,
       diamondOptions, variantConfig, specifications,
       occasion, gender, isFeatured, isActive, Price, discountedPrice,
       discountPercentage, basePrice, silverBasePrice, weight,
       weight10K, weight14K, weight18K, weight22K, weightSilver, weightPlatinum,
       allowedMetals, allowedCarats, allowedClarities, allowedColors, allowedSizes,
-      metaTitle, metaDescription, keywords
+      metaTitle, metaDescription, keywords, certificate
     } = req.body;
 
     let images = [];
     let sizeChart = "";
+    let certificateFile = "";
 
     if (req.files) {
       if (req.files.images) {
@@ -61,6 +146,9 @@ const createProduct = async (req, res) => {
       }
       if (req.files.sizeChart) {
         sizeChart = `/uploads/${req.files.sizeChart[0].filename}`;
+      }
+      if (req.files.certificate) {
+        certificateFile = `/uploads/${req.files.certificate[0].filename}`;
       }
     }
 
@@ -84,15 +172,17 @@ const createProduct = async (req, res) => {
     }
 
     // 1. Create Base Product
-    const product = await Product.create({
+    const productData = {
       title,
       slug: finalSlug,
       description,
       category,
+      subCategory,
       makingCharge: parseNumber(makingCharge, 0),
       makingChargeType: makingChargeType || "per_gram",
       images,
       sizeChart,
+      certificate: certificateFile || certificate,
       diamondOptions: safeParseJSON(diamondOptions, []),
       specifications: safeParseJSON(specifications, {}),
       occasion: safeParseJSON(occasion, []),
@@ -119,7 +209,11 @@ const createProduct = async (req, res) => {
       metaTitle,
       metaDescription,
       keywords: safeParseJSON(keywords, [])
-    });
+    };
+
+    await populatePricingAndDiamonds(productData, req.body);
+
+    const product = await Product.create(productData);
 
     // 2. Generate and Create Variants if config is provided
     if (variantConfig) {
@@ -176,6 +270,7 @@ const getAllProducts = async (req, res) => {
     const skip = (page - 1) * limit;
 
     const products = await Product.find(filter)
+      .select("-isDeleted")
       .populate("category", "name")
       .sort({ createdAt: -1 })
       .skip(skip)
@@ -199,6 +294,7 @@ const getAllProducts = async (req, res) => {
 const getProductById = async (req, res) => {
   try {
     const product = await Product.findById(req.params.id)
+      .select("-isDeleted")
       .populate("category")
       .populate({
         path: "variants",
@@ -308,14 +404,30 @@ const updateProduct = async (req, res) => {
       updateData.slug = generatedSlug;
     }
 
+    let finalImages = [];
+    if (rawBody.existingImages) {
+      finalImages = safeParseJSON(rawBody.existingImages, []);
+    } else {
+      const existing = await Product.findById(id);
+      if (existing) finalImages = existing.images || [];
+    }
+
     if (req.files) {
       if (req.files.images) {
-        updateData.images = req.files.images.map((file) => `/uploads/${file.filename}`);
+        const newImages = req.files.images.map((file) => `/uploads/${file.filename}`);
+        finalImages = [...finalImages, ...newImages];
       }
       if (req.files.sizeChart) {
         updateData.sizeChart = `/uploads/${req.files.sizeChart[0].filename}`;
       }
+      if (req.files.certificate) {
+        updateData.certificate = `/uploads/${req.files.certificate[0].filename}`;
+      }
     }
+
+    updateData.images = finalImages;
+
+    await populatePricingAndDiamonds(updateData, req.body, id);
 
     const product = await Product.findByIdAndUpdate(id, updateData, { new: true })
       .populate("variants");
