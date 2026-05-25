@@ -2,6 +2,7 @@ const PricingModifier = require("../Models/PricingModifier.Model");
 const Product = require("../Models/Product.Model");
 const MetalRate = require("../Models/MetalRate.Model");
 const MakingCharge = require("../Models/MakingCharge.Model");
+const GlobalConfig = require("../Models/GlobalConfig.Model");
 const ApiResponse = require("../Utils/ApiResponse");
 const ApiError = require("../Utils/ApiError");
 
@@ -448,8 +449,13 @@ const calculatePrice = async (req, res) => {
 
     // 7. Compute totals
     const subTotal = metalCost + makingCost + diamondCost + colorModifier + clarityModifier + sizeModifier;
-    const gstAmount = subTotal * (gstPercentage / 100);
-    const finalPrice = subTotal + gstAmount;
+    
+    const marginConfig = await GlobalConfig.findOne({ key: "margin_percentage" });
+    const margin = marginConfig ? marginConfig.value : 0;
+    const marginAmount = subTotal * (margin / 100);
+
+    const finalPrice = subTotal + marginAmount;
+    const gstAmount = finalPrice * (gstPercentage / 100);
 
     res.status(200).json(
       new ApiResponse(
@@ -462,6 +468,8 @@ const calculatePrice = async (req, res) => {
           clarityAdjustment: Math.round(clarityModifier),
           sizeCost: Math.round(sizeModifier),
           subTotal: Math.round(subTotal),
+          margin: margin,
+          marginAmount: Math.round(marginAmount),
           gstAmount: Math.round(gstAmount),
           finalPrice: Math.round(finalPrice),
           selections

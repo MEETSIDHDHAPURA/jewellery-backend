@@ -1,5 +1,9 @@
 const Product = require("../Models/Product.Model");
 const ProductVariant = require("../Models/ProductVariant.Model");
+const MetalRate = require("../Models/MetalRate.Model");
+const MakingCharge = require("../Models/MakingCharge.Model");
+const GlobalConfig = require("../Models/GlobalConfig.Model");
+const PricingModifier = require("../Models/PricingModifier.Model");
 const ApiResponse = require("../Utils/ApiResponse");
 const ApiError = require("../Utils/ApiError");
 const { generateVariantCombinations } = require("../Utils/Product.utils");
@@ -129,7 +133,7 @@ const createProduct = async (req, res) => {
     const {
       title, slug, description, category, subCategory, makingCharge, makingChargeType,
       diamondOptions, variantConfig,
-      occasion, gender, isFeatured, isActive, Price,
+      occasion, gender, isFeatured, isActive, Price, isSoldOut,
       basePrice, silverBasePrice, weight,
       weight10K, weight14K, weight18K, weight22K, weightSilver, weightPlatinum,
       allowedMetals, allowedCarats, allowedClarities, allowedColors, allowedSizes,
@@ -188,6 +192,7 @@ const createProduct = async (req, res) => {
       gender: gender || "Women",
       isFeatured: parseBoolean(isFeatured, false),
       isActive: parseBoolean(isActive, true),
+      isSoldOut: parseBoolean(isSoldOut, false),
       Price: parseNumber(Price, 0),
       basePrice: parseNumber(basePrice, 0),
       silverBasePrice: parseNumber(silverBasePrice, 0),
@@ -324,9 +329,23 @@ const getProductById = async (req, res) => {
       diamondTypes: [...new Set(product.diamondOptions.map(d => d.diamondType))],
     };
 
+    // Fetch pricing metadata for client-side calculations
+    const [metalRates, makingCharges, marginConfig, pricingModifiers] = await Promise.all([
+      MetalRate.find({}),
+      MakingCharge.find({}),
+      GlobalConfig.findOne({ key: "margin_percentage" }),
+      PricingModifier.find({ category: product.category, isActive: true })
+    ]);
+
     res.status(200).json(new ApiResponse(200, {
       product,
-      availableFilters: filters
+      availableFilters: filters,
+      pricingMetadata: {
+        metalRates,
+        makingCharges,
+        margin: marginConfig ? marginConfig.value : 0,
+        pricingModifiers
+      }
     }, "Product fetched successfully"));
   } catch (error) {
     res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));
@@ -374,7 +393,8 @@ const updateProduct = async (req, res) => {
     const booleanFields = [
       "isFeatured",
       "isActive",
-      "isDeleted"
+      "isDeleted",
+      "isSoldOut"
     ];
 
     // Process all keys in req.body

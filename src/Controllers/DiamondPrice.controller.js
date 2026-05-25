@@ -5,7 +5,7 @@ const ApiError = require("../Utils/ApiError");
 // Create Diamond Price
 const createDiamondPrice = async (req, res) => {
   try {
-    const { diamondType, shape, carat, clarity, color, price, stock } = req.body;
+    const { diamondType, shape, carat, clarity, color, price, stock, isSoldOut } = req.body;
 
     if (!shape || !carat || !clarity || !color) {
       throw new ApiError(400, "shape, carat, clarity, and color are required");
@@ -19,6 +19,7 @@ const createDiamondPrice = async (req, res) => {
       color,
       price: price || 0,
       stock: stock || 0,
+      isSoldOut: isSoldOut !== undefined ? isSoldOut : false,
     });
 
     res.status(201).json(new ApiResponse(201, diamond, "Diamond price created successfully"));
@@ -58,6 +59,7 @@ const bulkCreateDiamondPrices = async (req, res) => {
           price: d.price || 0,
           stock: d.stock || 0,
           isActive: d.isActive !== undefined ? d.isActive : true,
+          isSoldOut: d.isSoldOut !== undefined ? d.isSoldOut : false,
         },
         { upsert: true, returnDocument: "after" }
       );

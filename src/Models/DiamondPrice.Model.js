@@ -42,14 +42,12 @@ const diamondPriceSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    isSoldOut: {
+      type: Boolean,
+      default: false,
+    },
   },
   { timestamps: true }
-);
-
-// Compound unique index to prevent duplicate entries
-diamondPriceSchema.index(
-  { diamondType: 1, shape: 1, carat: 1, clarity: 1, color: 1 },
-  { unique: true }
 );
 
 const DiamondPrice = mongoose.model("DiamondPrice", diamondPriceSchema);
