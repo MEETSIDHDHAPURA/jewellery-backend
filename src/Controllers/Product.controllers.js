@@ -129,8 +129,8 @@ const createProduct = async (req, res) => {
     const {
       title, slug, description, category, subCategory, makingCharge, makingChargeType,
       diamondOptions, variantConfig,
-      occasion, gender, isFeatured, isActive, Price, discountedPrice,
-      discountPercentage, basePrice, silverBasePrice, weight,
+      occasion, gender, isFeatured, isActive, Price,
+      basePrice, silverBasePrice, weight,
       weight10K, weight14K, weight18K, weight22K, weightSilver, weightPlatinum,
       allowedMetals, allowedCarats, allowedClarities, allowedColors, allowedSizes,
       metaTitle, metaDescription, keywords, certificate
@@ -189,8 +189,6 @@ const createProduct = async (req, res) => {
       isFeatured: parseBoolean(isFeatured, false),
       isActive: parseBoolean(isActive, true),
       Price: parseNumber(Price, 0),
-      discountedPrice: parseNumber(discountedPrice, 0),
-      discountPercentage: parseNumber(discountPercentage, 0),
       basePrice: parseNumber(basePrice, 0),
       silverBasePrice: parseNumber(silverBasePrice, 0),
       weight: parseNumber(weight, 0),
@@ -261,9 +259,9 @@ const getAllProducts = async (req, res) => {
 
     // Price Filter (on base listing price)
     if (minPrice || maxPrice) {
-      filter.discountedPrice = {};
-      if (minPrice) filter.discountedPrice.$gte = Number(minPrice);
-      if (maxPrice) filter.discountedPrice.$lte = Number(maxPrice);
+      filter.Price = {};
+      if (minPrice) filter.Price.$gte = Number(minPrice);
+      if (maxPrice) filter.Price.$lte = Number(maxPrice);
     }
 
     const skip = (page - 1) * limit;
@@ -276,10 +274,22 @@ const getAllProducts = async (req, res) => {
       .limit(Number(limit))
       .lean();
 
+    const latestProducts = await Product.find(filter)
+      .sort({ createdAt: -1 })
+      .limit(5)
+      .select("_id")
+      .lean();
+    const latestIds = latestProducts.map(p => p._id.toString());
+
+    const productsWithIsNew = products.map(product => ({
+      ...product,
+      isNew: latestIds.includes(product._id.toString())
+    }));
+
     const total = await Product.countDocuments(filter);
 
     res.status(200).json(new ApiResponse(200, {
-      products,
+      products: productsWithIsNew,
       pagination: { total, page: Number(page), limit: Number(limit), pages: Math.ceil(total / limit) }
     }, "Products fetched successfully"));
   } catch (error) {
@@ -348,8 +358,6 @@ const updateProduct = async (req, res) => {
     // 2. Number fields parsing
     const numberFields = [
       "Price",
-      "discountedPrice",
-      "discountPercentage",
       "makingCharge",
       "basePrice",
       "silverBasePrice",

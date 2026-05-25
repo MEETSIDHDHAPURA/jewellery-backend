@@ -270,16 +270,13 @@ const recalculateAndSavePrices = async (filterMetals = null) => {
         }
       }
 
-      // 4.6. Compute final base price and discounted price
+      // 4.6. Compute final base price
       const subTotal = metalCost + makingCost + diamondCost + colorModifier + clarityModifier + sizeModifier;
       const marginAmount = subTotal * (margin / 100);
       const newPrice = Math.round(subTotal + marginAmount);
-      const discountPercent = product.discountPercentage || 0;
-      const newDiscountedPrice = Math.round(newPrice * (1 - discountPercent / 100));
 
       // 4.7. Save to database
       product.Price = newPrice;
-      product.discountedPrice = newDiscountedPrice;
       await product.save();
     }
   } catch (error) {
