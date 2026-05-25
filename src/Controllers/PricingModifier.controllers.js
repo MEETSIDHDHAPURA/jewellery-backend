@@ -113,7 +113,7 @@ const updateModifier = async (req, res) => {
   try {
     const { id } = req.params;
     const modifier = await PricingModifier.findByIdAndUpdate(id, req.body, {
-      new: true,
+      returnDocument: "after",
     });
 
     if (!modifier) throw new ApiError(404, "Modifier not found");

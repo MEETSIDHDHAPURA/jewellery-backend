@@ -14,7 +14,7 @@ const updatePolicy = async (req, res) => {
     const policy = await Policy.findOneAndUpdate(
       { type },
       { content },
-      { upsert: true, new: true }
+      { upsert: true, returnDocument: "after" }
     );
 
     res.status(200).json(new ApiResponse(200, policy, `${type} updated successfully`));

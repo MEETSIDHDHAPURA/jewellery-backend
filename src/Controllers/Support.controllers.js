@@ -100,7 +100,7 @@ exports.updateTicketStatus = async (req, res) => {
     const ticket = await Support.findByIdAndUpdate(
       id,
       { status },
-      { new: true, runValidators: true }
+      { returnDocument: "after", runValidators: true }
     );
 
     if (!ticket) {

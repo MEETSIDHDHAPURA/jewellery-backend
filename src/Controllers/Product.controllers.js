@@ -128,7 +128,7 @@ const createProduct = async (req, res) => {
   try {
     const {
       title, slug, description, category, subCategory, makingCharge, makingChargeType,
-      diamondOptions, variantConfig, specifications,
+      diamondOptions, variantConfig,
       occasion, gender, isFeatured, isActive, Price, discountedPrice,
       discountPercentage, basePrice, silverBasePrice, weight,
       weight10K, weight14K, weight18K, weight22K, weightSilver, weightPlatinum,
@@ -184,7 +184,6 @@ const createProduct = async (req, res) => {
       sizeChart,
       certificate: certificateFile || certificate,
       diamondOptions: safeParseJSON(diamondOptions, []),
-      specifications: safeParseJSON(specifications, {}),
       occasion: safeParseJSON(occasion, []),
       gender: gender || "Women",
       isFeatured: parseBoolean(isFeatured, false),
@@ -336,7 +335,6 @@ const updateProduct = async (req, res) => {
     // 1. Array and Object fields parsing
     const jsonFields = [
       "diamondOptions",
-      "specifications",
       "occasion",
       "variants",
       "allowedMetals",
@@ -374,7 +372,7 @@ const updateProduct = async (req, res) => {
     // Process all keys in req.body
     Object.keys(rawBody).forEach(key => {
       if (jsonFields.includes(key)) {
-        const fallback = key === "specifications" ? {} : [];
+        const fallback = [];
         updateData[key] = safeParseJSON(rawBody[key], fallback);
       } else if (numberFields.includes(key)) {
         updateData[key] = parseNumber(rawBody[key], 0);
@@ -429,7 +427,7 @@ const updateProduct = async (req, res) => {
 
     await populatePricingAndDiamonds(updateData, req.body, id);
 
-    const product = await Product.findByIdAndUpdate(id, updateData, { new: true })
+    const product = await Product.findByIdAndUpdate(id, updateData, { returnDocument: "after" })
       .populate("variants");
       
     if (!product) throw new ApiError(404, "Product not found");
@@ -445,7 +443,7 @@ const updateProduct = async (req, res) => {
  */
 const deleteProduct = async (req, res) => {
   try {
-    const product = await Product.findByIdAndUpdate(req.params.id, { isDeleted: true }, { new: true });
+    const product = await Product.findByIdAndUpdate(req.params.id, { isDeleted: true }, { returnDocument: "after" });
     if (!product) throw new ApiError(404, "Product not found");
     
     // Also deactivate variants

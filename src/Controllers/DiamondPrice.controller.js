@@ -59,7 +59,7 @@ const bulkCreateDiamondPrices = async (req, res) => {
           stock: d.stock || 0,
           isActive: d.isActive !== undefined ? d.isActive : true,
         },
-        { upsert: true, new: true }
+        { upsert: true, returnDocument: "after" }
       );
       results.push(diamond);
     }
@@ -145,7 +145,7 @@ const getDiamondPrices = async (req, res) => {
 const updateDiamondPrice = async (req, res) => {
   try {
     const diamond = await DiamondPrice.findByIdAndUpdate(req.params.id, req.body, {
-      new: true,
+      returnDocument: "after",
       runValidators: true,
     });
 

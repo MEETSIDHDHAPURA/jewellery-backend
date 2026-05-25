@@ -124,14 +124,8 @@ const productSchema = new mongoose.Schema(
         ref: "ProductVariant",
       },
     ],
-    specifications: {
-      dimensions: String,
-      stoneDetails: String,
-      certification: String, // e.g., "SGL", "IGI", "BIS Hallmark"
-    },
     occasion: {
       type: [String],
-      enum: ["engagement", "anniversary", "Bridal", "every day wear", "festival"],
       default: [],
     },
     gender: {

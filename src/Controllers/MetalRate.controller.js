@@ -29,7 +29,7 @@ exports.updateMetalRates = async (req, res) => {
             pricePer10Gram: rate.pricePer10Gram,
             updatedBy: req.user ? req.user._id : undefined
           },
-          { new: true, upsert: true }
+          { returnDocument: "after", upsert: true }
         );
       })
     );

@@ -17,7 +17,7 @@ const updateNavigation = async (req, res) => {
         metals: metals ? JSON.parse(metals) : [],
         priceRanges: priceRanges ? JSON.parse(priceRanges) : [],
       },
-      { upsert: true, new: true }
+      { upsert: true, returnDocument: "after" }
     );
 
     res.status(200).json(new ApiResponse(200, nav, "Navigation updated successfully"));

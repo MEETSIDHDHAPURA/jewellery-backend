@@ -69,7 +69,7 @@ const updateMakingCharge = async (req, res) => {
         value,
         updatedBy: req.user ? req.user._id : undefined,
       },
-      { new: true, runValidators: true }
+      { returnDocument: "after", runValidators: true }
     );
 
     if (!charge) {
@@ -125,7 +125,7 @@ const setMargin = async (req, res) => {
     const config = await GlobalConfig.findOneAndUpdate(
       { key: "margin_percentage" },
       { key: "margin_percentage", value: Number(margin) },
-      { upsert: true, new: true }
+      { upsert: true, returnDocument: "after" }
     );
 
     await recalculateAndSavePrices();
