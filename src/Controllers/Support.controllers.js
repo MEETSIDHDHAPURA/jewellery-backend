@@ -13,7 +13,8 @@ exports.getAllTickets = async (req, res) => {
           email: "amit.sharma@example.com",
           phone: "+91 98765 43210",
           subject: "Custom Ring Inquiry",
-          message: "Hi, I am looking to order a customized 18K white gold engagement ring with a 1.5 carat round cut diamond. Could you please share the design catalogs and tell me how much time it would take to manufacture?",
+          message:
+            "Hi, I am looking to order a customized 18K white gold engagement ring with a 1.5 carat round cut diamond. Could you please share the design catalogs and tell me how much time it would take to manufacture?",
           status: "Pending",
         },
         {
@@ -21,7 +22,8 @@ exports.getAllTickets = async (req, res) => {
           email: "priya.patel@example.com",
           phone: "+91 87654 32109",
           subject: "Order Delivery Status Delay",
-          message: "Hello Support Team, my order for the gold solitaire pendant (#ORD-8947) was supposed to arrive yesterday. The tracking link still shows in-transit. Can you please assist?",
+          message:
+            "Hello Support Team, my order for the gold solitaire pendant (#ORD-8947) was supposed to arrive yesterday. The tracking link still shows in-transit. Can you please assist?",
           status: "In Progress",
         },
         {
@@ -29,7 +31,8 @@ exports.getAllTickets = async (req, res) => {
           email: "rajesh.kumar@example.com",
           phone: "+91 76543 21098",
           subject: "Certificate of Diamond Authenticity",
-          message: "Thank you for the fast shipping of the princess cut diamond earrings! I received them today. However, I could not find the physical GIA authenticity certificate inside the package. Could you email me a digital copy or ship the certificate?",
+          message:
+            "Thank you for the fast shipping of the princess cut diamond earrings! I received them today. However, I could not find the physical GIA authenticity certificate inside the package. Could you email me a digital copy or ship the certificate?",
           status: "Resolved",
         },
       ];
@@ -59,14 +62,16 @@ exports.createTicket = async (req, res) => {
     if (!name || !email || !phone || !subject || !message) {
       return res.status(400).json({
         success: false,
-        message: "All fields are required to create a ticket",
+        message: "Name, email, phone, subject, and message are required to create a ticket",
       });
     }
+
+    const normalizedPhone = typeof phone === "string" ? phone.trim() : "";
 
     const newTicket = await Support.create({
       name,
       email,
-      phone,
+      phone: normalizedPhone,
       subject,
       message,
     });
