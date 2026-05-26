@@ -1,6 +1,7 @@
 const Banner = require("../Models/Banner.Model");
 const ApiResponse = require("../Utils/ApiResponse");
 const ApiError = require("../Utils/ApiError");
+const { uploadOnCloudinary, updateOnCloudinary } = require("../Utils/Cloudinary");
 
 // Create Banner
 const createBanner = async (req, res) => {
@@ -10,7 +11,10 @@ const createBanner = async (req, res) => {
     let mediaType = "image";
 
     if (req.file) {
-      media = `/uploads/${req.file.filename}`;
+      const uploadRes = await uploadOnCloudinary(req.file.path);
+      if (uploadRes) {
+        media = uploadRes.secure_url;
+      }
       if (req.file.mimetype && req.file.mimetype.startsWith("video/")) {
         mediaType = "video";
       }
@@ -64,7 +68,10 @@ const updateBanner = async (req, res) => {
     let mediaType = banner.mediaType;
 
     if (req.file) {
-      media = `/uploads/${req.file.filename}`;
+      const uploadRes = await updateOnCloudinary(banner.media, req.file.path);
+      if (uploadRes) {
+        media = uploadRes.secure_url;
+      }
       if (req.file.mimetype && req.file.mimetype.startsWith("video/")) {
         mediaType = "video";
       } else {

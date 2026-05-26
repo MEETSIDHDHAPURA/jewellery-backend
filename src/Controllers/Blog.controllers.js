@@ -1,12 +1,19 @@
 const Blog = require("../Models/Blog.Model");
 const ApiResponse = require("../Utils/ApiResponse");
 const ApiError = require("../Utils/ApiError");
+const { uploadOnCloudinary } = require("../Utils/Cloudinary");
 
 // Create Blog
 const createBlog = async (req, res) => {
   try {
     const { title, content, author, tags } = req.body;
-    const image = req.file ? `/uploads/${req.file.filename}` : undefined;
+    let image = undefined;
+    if (req.file) {
+      const uploadRes = await uploadOnCloudinary(req.file.path);
+      if (uploadRes) {
+        image = uploadRes.secure_url;
+      }
+    }
 
     if (!title || !content) {
       throw new ApiError(400, "Title and Content are required");

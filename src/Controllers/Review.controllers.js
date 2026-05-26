@@ -1,6 +1,7 @@
 const Review = require("../Models/Review.Model");
 const ApiError = require("../Utils/ApiError");
 const ApiResponse = require("../Utils/ApiResponse");
+const { uploadOnCloudinary } = require("../Utils/Cloudinary");
 
 // Add a new review to a product
 const createReview = async (req, res) => {
@@ -21,14 +22,17 @@ const createReview = async (req, res) => {
 
     const media = [];
     if (req.files && req.files.length > 0) {
-      req.files.forEach((file) => {
+      for (const file of req.files) {
         // Simple type check based on mimetype
         const type = file.mimetype.startsWith("video") ? "video" : "image";
-        media.push({
-          url: `/uploads/${file.filename}`,
-          type,
-        });
-      });
+        const uploadRes = await uploadOnCloudinary(file.path);
+        if (uploadRes) {
+          media.push({
+            url: uploadRes.secure_url,
+            type,
+          });
+        }
+      }
     }
 
     const review = await Review.create({
@@ -90,13 +94,16 @@ const updateReview = async (req, res) => {
     if (comment) review.comment = comment;
 
     if (req.files && req.files.length > 0) {
-      req.files.forEach((file) => {
+      for (const file of req.files) {
         const type = file.mimetype.startsWith("video") ? "video" : "image";
-        review.media.push({
-          url: `/uploads/${file.filename}`,
-          type,
-        });
-      });
+        const uploadRes = await uploadOnCloudinary(file.path);
+        if (uploadRes) {
+          review.media.push({
+            url: uploadRes.secure_url,
+            type,
+          });
+        }
+      }
     }
 
     await review.save();

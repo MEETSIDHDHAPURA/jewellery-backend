@@ -1,6 +1,7 @@
 const DiamondPrice = require("../Models/DiamondPrice.Model.js");
 const ApiResponse = require("../Utils/ApiResponse");
 const ApiError = require("../Utils/ApiError");
+const { uploadOnCloudinary, updateOnCloudinary, deleteFromCloudinary } = require("../Utils/Cloudinary");
 
 // Create Diamond Price
 const createDiamondPrice = async (req, res) => {
@@ -9,6 +10,20 @@ const createDiamondPrice = async (req, res) => {
 
     if (!shape || !carat || !clarity || !color) {
       throw new ApiError(400, "shape, carat, clarity, and color are required");
+    }
+
+    let imageUrl = "";
+    let certificateUrl = "";
+
+    if (req.files) {
+      if (req.files.image) {
+        const uploadRes = await uploadOnCloudinary(req.files.image[0].path);
+        if (uploadRes) imageUrl = uploadRes.secure_url;
+      }
+      if (req.files.certificate) {
+        const uploadRes = await uploadOnCloudinary(req.files.certificate[0].path);
+        if (uploadRes) certificateUrl = uploadRes.secure_url;
+      }
     }
 
     const diamond = await DiamondPrice.create({
@@ -20,6 +35,8 @@ const createDiamondPrice = async (req, res) => {
       price: price || 0,
       stock: stock || 0,
       isSoldOut: isSoldOut !== undefined ? isSoldOut : false,
+      image: imageUrl,
+      certificate: certificateUrl,
     });
 
     res.status(201).json(new ApiResponse(201, diamond, "Diamond price created successfully"));
@@ -143,17 +160,48 @@ const getDiamondPrices = async (req, res) => {
   }
 };
 
-// Update Diamond Price By ID
-const updateDiamondPrice = async (req, res) => {
+// Get Diamond Price By ID
+const getDiamondPriceById = async (req, res) => {
   try {
-    const diamond = await DiamondPrice.findByIdAndUpdate(req.params.id, req.body, {
-      returnDocument: "after",
-      runValidators: true,
-    });
-
+    const diamond = await DiamondPrice.findById(req.params.id);
     if (!diamond) {
       throw new ApiError(404, "Diamond price not found");
     }
+    res.status(200).json(new ApiResponse(200, diamond, "Diamond price fetched successfully"));
+  } catch (error) {
+    res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));
+  }
+};
+
+// Update Diamond Price By ID
+const updateDiamondPrice = async (req, res) => {
+  try {
+    const existing = await DiamondPrice.findById(req.params.id);
+    if (!existing) {
+      throw new ApiError(404, "Diamond price not found");
+    }
+
+    const updateData = { ...req.body };
+
+    if (req.files) {
+      if (req.files.image) {
+        const uploadRes = await updateOnCloudinary(existing.image, req.files.image[0].path);
+        if (uploadRes) {
+          updateData.image = uploadRes.secure_url;
+        }
+      }
+      if (req.files.certificate) {
+        const uploadRes = await updateOnCloudinary(existing.certificate, req.files.certificate[0].path);
+        if (uploadRes) {
+          updateData.certificate = uploadRes.secure_url;
+        }
+      }
+    }
+
+    const diamond = await DiamondPrice.findByIdAndUpdate(req.params.id, updateData, {
+      returnDocument: "after",
+      runValidators: true,
+    });
 
     res.status(200).json(new ApiResponse(200, diamond, "Diamond price updated successfully"));
   } catch (error) {
@@ -167,10 +215,19 @@ const updateDiamondPrice = async (req, res) => {
 // Delete Diamond Price By ID
 const deleteDiamondPrice = async (req, res) => {
   try {
-    const diamond = await DiamondPrice.findByIdAndDelete(req.params.id);
+    const diamond = await DiamondPrice.findById(req.params.id);
     if (!diamond) {
       throw new ApiError(404, "Diamond price not found");
     }
+
+    if (diamond.image) {
+      await deleteFromCloudinary(diamond.image);
+    }
+    if (diamond.certificate) {
+      await deleteFromCloudinary(diamond.certificate);
+    }
+
+    await DiamondPrice.findByIdAndDelete(req.params.id);
     res.status(200).json(new ApiResponse(200, {}, "Diamond price deleted successfully"));
   } catch (error) {
     res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));
@@ -181,6 +238,7 @@ module.exports = {
   createDiamondPrice,
   bulkCreateDiamondPrices,
   getDiamondPrices,
+  getDiamondPriceById,
   updateDiamondPrice,
   deleteDiamondPrice,
 };

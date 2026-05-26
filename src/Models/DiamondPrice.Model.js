@@ -5,7 +5,7 @@ const diamondPriceSchema = new mongoose.Schema(
     diamondType: {
       type: String,
       required: true,
-      enum: ["Natural", "Lab Grown"],
+      enum: ["Natural", "Lab Grown", "Mojonight"],
       default: "Lab Grown",
     },
     shape: {
@@ -45,6 +45,12 @@ const diamondPriceSchema = new mongoose.Schema(
     isSoldOut: {
       type: Boolean,
       default: false,
+    },
+    image: {
+      type: String,
+    },
+    certificate: {
+      type: String,
     },
   },
   { timestamps: true }

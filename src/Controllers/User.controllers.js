@@ -5,6 +5,7 @@ const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const crypto = require("crypto");
 const sendMail = require("../Utils/Nodemailer");
+const { uploadOnCloudinary, updateOnCloudinary } = require("../Utils/Cloudinary");
 
 // Register User
 const registerUser = async (req, res) => {
@@ -163,7 +164,10 @@ const updateUserProfile = async (req, res) => {
 
     // Handle avatar update if a file is uploaded
     if (req.file) {
-      user.avatar = `/uploads/${req.file.filename}`;
+      const uploadRes = await updateOnCloudinary(user.avatar, req.file.path);
+      if (uploadRes) {
+        user.avatar = uploadRes.secure_url;
+      }
     }
 
     await user.save();

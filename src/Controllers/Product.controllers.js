@@ -6,6 +6,7 @@ const GlobalConfig = require("../Models/GlobalConfig.Model");
 const PricingModifier = require("../Models/PricingModifier.Model");
 const ApiResponse = require("../Utils/ApiResponse");
 const ApiError = require("../Utils/ApiError");
+const { uploadOnCloudinary, updateOnCloudinary } = require("../Utils/Cloudinary");
 const { generateVariantCombinations } = require("../Utils/Product.utils");
 const fs = require("fs");
 
@@ -146,13 +147,24 @@ const createProduct = async (req, res) => {
 
     if (req.files) {
       if (req.files.images) {
-        images = req.files.images.map((file) => `/uploads/${file.filename}`);
+        for (const file of req.files.images) {
+          const uploadRes = await uploadOnCloudinary(file.path);
+          if (uploadRes) {
+            images.push(uploadRes.secure_url);
+          }
+        }
       }
       if (req.files.sizeChart) {
-        sizeChart = `/uploads/${req.files.sizeChart[0].filename}`;
+        const uploadRes = await uploadOnCloudinary(req.files.sizeChart[0].path);
+        if (uploadRes) {
+          sizeChart = uploadRes.secure_url;
+        }
       }
       if (req.files.certificate) {
-        certificateFile = `/uploads/${req.files.certificate[0].filename}`;
+        const uploadRes = await uploadOnCloudinary(req.files.certificate[0].path);
+        if (uploadRes) {
+          certificateFile = uploadRes.secure_url;
+        }
       }
     }
 
@@ -358,6 +370,9 @@ const getProductById = async (req, res) => {
 const updateProduct = async (req, res) => {
   try {
     const { id } = req.params;
+    const existing = await Product.findById(id);
+    if (!existing) throw new ApiError(404, "Product not found");
+
     const rawBody = { ...req.body };
     const updateData = {};
 
@@ -434,20 +449,31 @@ const updateProduct = async (req, res) => {
     if (rawBody.existingImages) {
       finalImages = safeParseJSON(rawBody.existingImages, []);
     } else {
-      const existing = await Product.findById(id);
-      if (existing) finalImages = existing.images || [];
+      finalImages = existing.images || [];
     }
 
     if (req.files) {
       if (req.files.images) {
-        const newImages = req.files.images.map((file) => `/uploads/${file.filename}`);
+        const newImages = [];
+        for (const file of req.files.images) {
+          const uploadRes = await uploadOnCloudinary(file.path);
+          if (uploadRes) {
+            newImages.push(uploadRes.secure_url);
+          }
+        }
         finalImages = [...finalImages, ...newImages];
       }
       if (req.files.sizeChart) {
-        updateData.sizeChart = `/uploads/${req.files.sizeChart[0].filename}`;
+        const uploadRes = await updateOnCloudinary(existing.sizeChart, req.files.sizeChart[0].path);
+        if (uploadRes) {
+          updateData.sizeChart = uploadRes.secure_url;
+        }
       }
       if (req.files.certificate) {
-        updateData.certificate = `/uploads/${req.files.certificate[0].filename}`;
+        const uploadRes = await updateOnCloudinary(existing.certificate, req.files.certificate[0].path);
+        if (uploadRes) {
+          updateData.certificate = uploadRes.secure_url;
+        }
       }
     }
 

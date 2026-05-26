@@ -1,25 +1,38 @@
 const Category = require("../Models/Category.Model");
 const ApiResponse = require("../Utils/ApiResponse");
 const ApiError = require("../Utils/ApiError");
+const { uploadOnCloudinary, updateOnCloudinary, deleteFromCloudinary } = require("../Utils/Cloudinary");
 
 // Create Category
 const createCategory = async (req, res) => {
   try {
     const { name, description, image } = req.body;
 
-    if (!name) {
+    if (!name || !name.trim()) {
       throw new ApiError(400, "Category name is required");
     }
 
-    const existingCategory = await Category.findOne({ name });
+    const trimmedName = name.trim();
+
+    const existingCategory = await Category.findOne({
+      name: { $regex: `^${trimmedName}$`, $options: "i" }
+    });
     if (existingCategory) {
       throw new ApiError(409, "Category already exists");
     }
 
+    let imageUrl = "";
+    if (image) {
+      const uploadRes = await uploadOnCloudinary(image);
+      if (uploadRes) {
+        imageUrl = uploadRes.secure_url;
+      }
+    }
+
     const category = await Category.create({
-      name,
+      name: trimmedName,
       description,
-      image,
+      image: imageUrl,
     });
 
     res.status(201).json(new ApiResponse(201, category, "Category created successfully"));
@@ -57,10 +70,33 @@ const updateCategory = async (req, res) => {
     }
 
     if (name) {
-      category.name = name;
+      const trimmedName = name.trim();
+      if (!trimmedName) {
+        throw new ApiError(400, "Category name cannot be empty");
+      }
+
+      const existingCategory = await Category.findOne({
+        name: { $regex: `^${trimmedName}$`, $options: "i" },
+        _id: { $ne: id }
+      });
+      if (existingCategory) {
+        throw new ApiError(409, "Category name already exists");
+      }
+      category.name = trimmedName;
     }
     if (description) category.description = description;
-    if (image) category.image = image;
+    
+    if (image) {
+      if (image.startsWith("data:")) {
+        const uploadRes = await updateOnCloudinary(category.image, image);
+        if (uploadRes) {
+          category.image = uploadRes.secure_url;
+        }
+      } else {
+        category.image = image;
+      }
+    }
+    
     if (typeof isActive !== "undefined") category.isActive = isActive;
 
     await category.save();
@@ -75,11 +111,17 @@ const updateCategory = async (req, res) => {
 const deleteCategory = async (req, res) => {
   try {
     const { id } = req.params;
-    const category = await Category.findByIdAndDelete(id);
+    const category = await Category.findById(id);
 
     if (!category) {
       throw new ApiError(404, "Category not found");
     }
+
+    if (category.image) {
+      await deleteFromCloudinary(category.image);
+    }
+
+    await category.deleteOne();
 
     res.status(200).json(new ApiResponse(200, {}, "Category deleted successfully"));
   } catch (error) {

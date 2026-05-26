@@ -7,7 +7,7 @@ const mongoose = require("mongoose");
 const diamondOptionSchema = new mongoose.Schema({
   diamondType: {
     type: String,
-    enum: ["Natural", "Lab Grown"],
+    enum: ["Natural", "Lab Grown", "Mojonight"],
     required: true,
   },
   carat: { type: String, required: true }, // e.g., "1ct", "0.5ct"
