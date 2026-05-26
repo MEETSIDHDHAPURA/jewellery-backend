@@ -1,32 +1,29 @@
 const Banner = require("../Models/Banner.Model");
 const ApiResponse = require("../Utils/ApiResponse");
 const ApiError = require("../Utils/ApiError");
-const { uploadOnCloudinary, updateOnCloudinary } = require("../Utils/Cloudinary");
+const { uploadOnCloudinary, updateOnCloudinary, deleteFromCloudinary } = require("../Utils/Cloudinary");
 
 // Create Banner
 const createBanner = async (req, res) => {
   try {
-    const { title, subtitle, link, order, isActive } = req.body;
-    let media = undefined;
-    let mediaType = "image";
+    const { title, isActive } = req.body;
+    let imageUrl = undefined;
 
     if (req.file) {
       const uploadRes = await uploadOnCloudinary(req.file.path);
       if (uploadRes) {
-        media = uploadRes.secure_url;
-      }
-      if (req.file.mimetype && req.file.mimetype.startsWith("video/")) {
-        mediaType = "video";
+        imageUrl = uploadRes.secure_url;
       }
     }
 
+    // Auto-increment order: find the highest existing order and add 1
+    const lastBanner = await Banner.findOne().sort({ order: -1 });
+    const nextOrder = lastBanner ? lastBanner.order + 1 : 1;
+
     const banner = await Banner.create({
       title,
-      subtitle,
-      link,
-      media,
-      mediaType,
-      order: order ? Number(order) : 0,
+      image: imageUrl,
+      order: nextOrder,
       isActive: isActive !== undefined ? isActive : true,
     });
 
@@ -60,30 +57,18 @@ const getBannerById = async (req, res) => {
 // Update Banner
 const updateBanner = async (req, res) => {
   try {
-    const { title, subtitle, link, order, isActive } = req.body;
+    const { title, order, isActive } = req.body;
     const banner = await Banner.findById(req.params.id);
     if (!banner) throw new ApiError(404, "Banner not found");
 
-    let media = banner.media;
-    let mediaType = banner.mediaType;
-
     if (req.file) {
-      const uploadRes = await updateOnCloudinary(banner.media, req.file.path);
+      const uploadRes = await updateOnCloudinary(banner.image, req.file.path);
       if (uploadRes) {
-        media = uploadRes.secure_url;
-      }
-      if (req.file.mimetype && req.file.mimetype.startsWith("video/")) {
-        mediaType = "video";
-      } else {
-        mediaType = "image";
+        banner.image = uploadRes.secure_url;
       }
     }
 
     banner.title = title !== undefined ? title : banner.title;
-    banner.subtitle = subtitle !== undefined ? subtitle : banner.subtitle;
-    banner.link = link !== undefined ? link : banner.link;
-    banner.media = media;
-    banner.mediaType = mediaType;
     banner.order = order !== undefined ? Number(order) : banner.order;
     banner.isActive = isActive !== undefined ? isActive : banner.isActive;
 
@@ -98,9 +83,40 @@ const updateBanner = async (req, res) => {
 // Delete Banner
 const deleteBanner = async (req, res) => {
   try {
-    const banner = await Banner.findByIdAndDelete(req.params.id);
+    const banner = await Banner.findById(req.params.id);
     if (!banner) throw new ApiError(404, "Banner not found");
+
+    // Clean up image from Cloudinary
+    if (banner.image) {
+      await deleteFromCloudinary(banner.image);
+    }
+
+    await Banner.findByIdAndDelete(req.params.id);
     res.status(200).json(new ApiResponse(200, {}, "Banner deleted successfully"));
+  } catch (error) {
+    res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));
+  }
+};
+
+// Reorder Banners
+const reorderBanners = async (req, res) => {
+  try {
+    const { orderedIds } = req.body;
+    if (!Array.isArray(orderedIds) || orderedIds.length === 0) {
+      throw new ApiError(400, "orderedIds array is required");
+    }
+
+    const bulkOps = orderedIds.map((id, index) => ({
+      updateOne: {
+        filter: { _id: id },
+        update: { $set: { order: index + 1 } },
+      },
+    }));
+
+    await Banner.bulkWrite(bulkOps);
+
+    const banners = await Banner.find().sort({ order: 1, createdAt: -1 });
+    res.status(200).json(new ApiResponse(200, banners, "Banners reordered successfully"));
   } catch (error) {
     res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));
   }
@@ -112,4 +128,5 @@ module.exports = {
   getBannerById,
   updateBanner,
   deleteBanner,
+  reorderBanners,
 };

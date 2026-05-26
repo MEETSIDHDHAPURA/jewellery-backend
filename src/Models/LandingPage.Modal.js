@@ -12,9 +12,9 @@ const LandingPageSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
-    display_mode: {
-      type: String,
-      default: null,
+    display_order: {
+      type: Number,
+      default: 0,
     },
   },
   { timestamps: true }

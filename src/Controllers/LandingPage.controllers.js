@@ -69,8 +69,34 @@ const updateDisplayModeHomepageSection = async (req, res) => {
   }
 };
 
+// Create new homepage section
+const createHomepageSection = async (req, res) => {
+  try {
+    const { section_key, is_active, display_mode } = req.body;
+    if (!section_key) {
+      throw new ApiError(400, "section_key is required");
+    }
+
+    const existing = await HomepageSection.findOne({ section_key });
+    if (existing) {
+      throw new ApiError(400, `Homepage section '${section_key}' already exists`);
+    }
+
+    const section = await HomepageSection.create({
+      section_key,
+      is_active: is_active !== undefined ? is_active : true,
+      display_mode: display_mode || null,
+    });
+
+    res.status(201).json(new ApiResponse(201, section, "Homepage section created successfully"));
+  } catch (error) {
+    res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));
+  }
+};
+
 module.exports = {
   getAllHomepageSections,
+  createHomepageSection,
   toggleActiveHomepageSection,
   updateDisplayModeHomepageSection,
 };
