@@ -32,7 +32,13 @@ const registerUser = async (req, res) => {
 
     const createdUser = await User.findById(user._id).select("-password");
 
-    res.status(201).json(new ApiResponse(201, createdUser, "User registered successfully"));
+    const token = jwt.sign(
+      { id: createdUser._id, email: createdUser.email },
+      process.env.JWT_SECRET || "user_secret_key",
+      { expiresIn: "7d" }
+    );
+
+    res.status(201).json(new ApiResponse(201, { user: createdUser, token }, "User registered successfully"));
   } catch (error) {
     res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));
   }
