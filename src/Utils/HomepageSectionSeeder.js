@@ -1,22 +1,26 @@
 const HomepageSection = require("../Models/LandingPage.Modal");
 
 const seedHomepageSections = async () => {
-  const defaultSections = [
-    { section_key: "shop_by_category", is_active: true, display_mode: null },
-    { section_key: "hero_banner", is_active: true, display_mode: null },
-    { section_key: "featured_products", is_active: true, display_mode: "featured" },
-    { section_key: "our_story", is_active: true, display_mode: null },
-    { section_key: "new_arrivals", is_active: true, display_mode: "new_arrivals" },
-    { section_key: "shop_by_occasion", is_active: true, display_mode: null },
-    { section_key: "faqs", is_active: true, display_mode: null }
-  ];
+  try {
+    const defaultSections = [
+      { section_key: "hero", is_active: true, display_order: 1 },
+      { section_key: "category_showcase", is_active: true, display_order: 2 },
+      { section_key: "featured_products", is_active: true, display_order: 3 },
+      { section_key: "new_arrivals", is_active: true, display_order: 4 },
+      { section_key: "occasion", is_active: true, display_order: 5 },
+      { section_key: "testimonials", is_active: true, display_order: 6 },
+      { section_key: "brand_story", is_active: true, display_order: 7 }
+    ];
 
-  for (const section of defaultSections) {
-    await HomepageSection.findOneAndUpdate(
-      { section_key: section.section_key },
-      section,
-      { upsert: true, new: true }
-    );
+    for (const sec of defaultSections) {
+      const existing = await HomepageSection.findOne({ section_key: sec.section_key });
+      if (!existing) {
+        await HomepageSection.create(sec);
+      }
+    }
+    console.log("Homepage sections seeded successfully!");
+  } catch (error) {
+    console.error("Error seeding homepage sections:", error);
   }
 };
 

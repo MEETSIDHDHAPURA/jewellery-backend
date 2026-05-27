@@ -6,5 +6,8 @@ router.get("/homepage", homepageSectionController.getAllHomepageSections);
 router.post("/homepage", homepageSectionController.createHomepageSection);
 router.put("/homepage/:section_key/toggle-active", homepageSectionController.toggleActiveHomepageSection);
 router.put("/homepage/:section_key/display-mode", homepageSectionController.updateDisplayModeHomepageSection);
+router.get("/landing-page-data", homepageSectionController.getLandingPageData);
+router.get("/homepage/data", homepageSectionController.getLandingPageData);
 
 module.exports = router;
+

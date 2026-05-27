@@ -16,8 +16,13 @@ const LandingPageSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    display_mode: {
+      type: String,
+      default: null,
+    },
   },
   { timestamps: true }
 );
 
 module.exports = mongoose.model("LandingPage", LandingPageSchema);
+
