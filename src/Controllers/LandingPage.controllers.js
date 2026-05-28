@@ -124,7 +124,7 @@ const getLandingPageData = async (req, res) => {
     // 3. Query banner data if hero section is active
     let heroBanners = [];
     if (sectionStatus.hero) {
-      heroBanners = await Banner.find({ isActive: true }).sort({ order: 1, createdAt: -1 });
+      heroBanners = await Banner.find({ isActive: true }).populate("category", "name _id").sort({ order: 1, createdAt: -1 });
     }
 
     // 4. Query category data if showcase is active
@@ -193,6 +193,7 @@ const getLandingPageData = async (req, res) => {
           // Place sold products first, followed by random unsold products to fill layout (limit to 5)
           featuredProducts = [...soldProducts, ...shuffledUnsold].slice(0, 5);
         }
+        featuredProducts = featuredProducts.map(p => ({ ...p, displayMode: "best_sellers", isBestseller: true }));
       } else {
         // Default standard Featured Products (10 featured products)
         featuredProducts = await Product.find({ 
@@ -203,6 +204,7 @@ const getLandingPageData = async (req, res) => {
         .populate("category", "name")
         .limit(10)
         .lean();
+        featuredProducts = featuredProducts.map(p => ({ ...p, displayMode: "featured", isBestseller: false }));
       }
     }
 
@@ -210,6 +212,9 @@ const getLandingPageData = async (req, res) => {
     // 6. Query new arrivals (last 5 added active products)
     let newArrivals = [];
     if (sectionStatus.new_arrivals) {
+      const newArrivalsSection = sections.find(s => s.section_key === "new_arrivals");
+      const displayMode = newArrivalsSection ? newArrivalsSection.display_mode : "new_arrivals";
+
       newArrivals = await Product.find({ 
         isActive: true, 
         isDeleted: false 
@@ -218,6 +223,12 @@ const getLandingPageData = async (req, res) => {
       .sort({ createdAt: -1 })
       .limit(5)
       .lean();
+
+      if (displayMode === "trending") {
+        newArrivals = newArrivals.map(p => ({ ...p, displayMode: "trending", isTrending: true }));
+      } else {
+        newArrivals = newArrivals.map(p => ({ ...p, displayMode: "new_arrivals", isTrending: false }));
+      }
     }
 
     // 7. Query active unique occasions

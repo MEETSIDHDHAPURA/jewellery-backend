@@ -6,7 +6,7 @@ const { uploadOnCloudinary, updateOnCloudinary, deleteFromCloudinary } = require
 // Create Banner
 const createBanner = async (req, res) => {
   try {
-    const { title, isActive } = req.body;
+    const { title, isActive, category, topLine, subtitle, bgWord } = req.body;
     let imageUrl = undefined;
 
     if (req.file) {
@@ -25,6 +25,10 @@ const createBanner = async (req, res) => {
       image: imageUrl,
       order: nextOrder,
       isActive: isActive !== undefined ? isActive : true,
+      category: category || undefined,
+      topLine,
+      subtitle,
+      bgWord,
     });
 
     res.status(201).json(new ApiResponse(201, banner, "Banner created successfully"));
@@ -36,7 +40,7 @@ const createBanner = async (req, res) => {
 // Get All Banners
 const getAllBanners = async (req, res) => {
   try {
-    const banners = await Banner.find().sort({ order: 1, createdAt: -1 });
+    const banners = await Banner.find().populate("category").sort({ order: 1, createdAt: -1 });
     res.status(200).json(new ApiResponse(200, banners, "Banners fetched successfully"));
   } catch (error) {
     res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));
@@ -46,7 +50,7 @@ const getAllBanners = async (req, res) => {
 // Get Banner By ID
 const getBannerById = async (req, res) => {
   try {
-    const banner = await Banner.findById(req.params.id);
+    const banner = await Banner.findById(req.params.id).populate("category");
     if (!banner) throw new ApiError(404, "Banner not found");
     res.status(200).json(new ApiResponse(200, banner, "Banner fetched successfully"));
   } catch (error) {
@@ -57,7 +61,7 @@ const getBannerById = async (req, res) => {
 // Update Banner
 const updateBanner = async (req, res) => {
   try {
-    const { title, order, isActive } = req.body;
+    const { title, order, isActive, category, topLine, subtitle, bgWord } = req.body;
     const banner = await Banner.findById(req.params.id);
     if (!banner) throw new ApiError(404, "Banner not found");
 
@@ -71,6 +75,12 @@ const updateBanner = async (req, res) => {
     banner.title = title !== undefined ? title : banner.title;
     banner.order = order !== undefined ? Number(order) : banner.order;
     banner.isActive = isActive !== undefined ? isActive : banner.isActive;
+    banner.topLine = topLine !== undefined ? topLine : banner.topLine;
+    banner.subtitle = subtitle !== undefined ? subtitle : banner.subtitle;
+    banner.bgWord = bgWord !== undefined ? bgWord : banner.bgWord;
+    if (category !== undefined) {
+      banner.category = category || null;
+    }
 
     await banner.save();
 
@@ -115,7 +125,7 @@ const reorderBanners = async (req, res) => {
 
     await Banner.bulkWrite(bulkOps);
 
-    const banners = await Banner.find().sort({ order: 1, createdAt: -1 });
+    const banners = await Banner.find().populate("category").sort({ order: 1, createdAt: -1 });
     res.status(200).json(new ApiResponse(200, banners, "Banners reordered successfully"));
   } catch (error) {
     res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));
