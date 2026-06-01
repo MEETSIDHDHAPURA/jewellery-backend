@@ -4,10 +4,12 @@ const { uploadOnCloudinary, deleteFromCloudinary } = require("../Utils/Cloudinar
 // Get all custom design requests
 exports.getAllCustomDesigns = async (req, res) => {
   try {
-    const { status, page = 1, limit = 10 } = req.query;
+    const { isNew, page = 1, limit = 10 } = req.query;
 
     const filter = {};
-    if (status) filter.status = status;
+    if (isNew !== undefined) {
+      filter.isNew = isNew === "true";
+    }
 
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
@@ -133,23 +135,20 @@ exports.createCustomDesign = async (req, res) => {
   }
 };
 
-// Update custom design status
+// Update custom design status/isNew
 exports.updateCustomDesignStatus = async (req, res) => {
   try {
     const { id } = req.params;
-    const { status } = req.body;
+    const { isNew } = req.body;
 
-    const validStatuses = ["Pending", "In Review", "Approved", "In Production", "Completed", "Rejected"];
-    if (!status || !validStatuses.includes(status)) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid status value provided",
-      });
+    const updateData = {};
+    if (isNew !== undefined) {
+      updateData.isNew = isNew;
     }
 
     const design = await CustomDesign.findByIdAndUpdate(
       id,
-      { status },
+      updateData,
       { returnDocument: "after", runValidators: true }
     );
 

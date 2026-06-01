@@ -52,9 +52,9 @@ const customDesignSchema = new mongoose.Schema(
     referenceImage: {
       type: String,
     },
-    status: {
-      type: String,
-      default: "Pending",
+    isNew: {
+      type: Boolean,
+      default: true,
     },
   },
   {

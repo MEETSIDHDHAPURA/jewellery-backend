@@ -15,7 +15,6 @@ exports.getAllTickets = async (req, res) => {
           subject: "Custom Ring Inquiry",
           message:
             "Hi, I am looking to order a customized 18K white gold engagement ring with a 1.5 carat round cut diamond. Could you please share the design catalogs and tell me how much time it would take to manufacture?",
-          status: "Pending",
         },
         {
           name: "Priya Patel",
@@ -24,7 +23,6 @@ exports.getAllTickets = async (req, res) => {
           subject: "Order Delivery Status Delay",
           message:
             "Hello Support Team, my order for the gold solitaire pendant (#ORD-8947) was supposed to arrive yesterday. The tracking link still shows in-transit. Can you please assist?",
-          status: "In Progress",
         },
         {
           name: "Rajesh Kumar",
@@ -33,7 +31,6 @@ exports.getAllTickets = async (req, res) => {
           subject: "Certificate of Diamond Authenticity",
           message:
             "Thank you for the fast shipping of the princess cut diamond earrings! I received them today. However, I could not find the physical GIA authenticity certificate inside the package. Could you email me a digital copy or ship the certificate?",
-          status: "Resolved",
         },
       ];
 
@@ -93,18 +90,16 @@ exports.createTicket = async (req, res) => {
 exports.updateTicketStatus = async (req, res) => {
   try {
     const { id } = req.params;
-    const { status } = req.body;
+    const { isNew } = req.body;
 
-    if (!status || !["Pending", "In Progress", "Resolved"].includes(status)) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid status value provided",
-      });
+    const updateData = {};
+    if (isNew !== undefined) {
+      updateData.isNew = isNew;
     }
 
     const ticket = await Support.findByIdAndUpdate(
       id,
-      { status },
+      updateData,
       { returnDocument: "after", runValidators: true }
     );
 
