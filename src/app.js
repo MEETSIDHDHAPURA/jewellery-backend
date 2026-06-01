@@ -20,6 +20,8 @@ const diamondPriceRoutes = require("./Routes/DiamondPrice.routes");
 const bannerRoutes = require("./Routes/Banner.Routes");
 const homepageSectionRoutes = require("./Routes/LandingPage.Routes");
 const customDesignRoutes = require("./Routes/CustomDesign.Routes");
+const cartRoutes = require("./Routes/Cart.Routes");
+
 
 app.use(
   cors({
@@ -54,5 +56,7 @@ app.use("/api/v1/banner", bannerRoutes);
 app.use("/admin", homepageSectionRoutes);
 app.use("/api/v1/admin", homepageSectionRoutes);
 app.use("/api/v1/custom-design", customDesignRoutes);
+app.use("/api/v1/cart", cartRoutes);
+
 
 module.exports = app;
