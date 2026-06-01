@@ -141,17 +141,45 @@ const createProduct = async (req, res) => {
       metaTitle, metaDescription, keywords, certificate
     } = req.body;
 
-    let images = [];
     let sizeChart = "";
     let certificateFile = "";
+    let metalImages = {
+      yellowGold: [],
+      whiteGold: [],
+      roseGold: [],
+      silver: [],
+      platinum: []
+    };
 
     if (req.files) {
-      if (req.files.images) {
-        for (const file of req.files.images) {
+      if (req.files.images_yellowGold) {
+        for (const file of req.files.images_yellowGold) {
           const uploadRes = await uploadOnCloudinary(file.path);
-          if (uploadRes) {
-            images.push(uploadRes.secure_url);
-          }
+          if (uploadRes) metalImages.yellowGold.push(uploadRes.secure_url);
+        }
+      }
+      if (req.files.images_whiteGold) {
+        for (const file of req.files.images_whiteGold) {
+          const uploadRes = await uploadOnCloudinary(file.path);
+          if (uploadRes) metalImages.whiteGold.push(uploadRes.secure_url);
+        }
+      }
+      if (req.files.images_roseGold) {
+        for (const file of req.files.images_roseGold) {
+          const uploadRes = await uploadOnCloudinary(file.path);
+          if (uploadRes) metalImages.roseGold.push(uploadRes.secure_url);
+        }
+      }
+      if (req.files.images_silver) {
+        for (const file of req.files.images_silver) {
+          const uploadRes = await uploadOnCloudinary(file.path);
+          if (uploadRes) metalImages.silver.push(uploadRes.secure_url);
+        }
+      }
+      if (req.files.images_platinum) {
+        for (const file of req.files.images_platinum) {
+          const uploadRes = await uploadOnCloudinary(file.path);
+          if (uploadRes) metalImages.platinum.push(uploadRes.secure_url);
         }
       }
       if (req.files.sizeChart) {
@@ -196,7 +224,7 @@ const createProduct = async (req, res) => {
       subCategory,
       makingCharge: parseNumber(makingCharge, 0),
       makingChargeType: makingChargeType || "per_gram",
-      images,
+      metalImages,
       sizeChart,
       certificate: certificateFile || certificate,
       diamondOptions: safeParseJSON(diamondOptions, []),
@@ -445,23 +473,59 @@ const updateProduct = async (req, res) => {
       updateData.slug = generatedSlug;
     }
 
-    let finalImages = [];
-    if (rawBody.existingImages) {
-      finalImages = safeParseJSON(rawBody.existingImages, []);
-    } else {
-      finalImages = existing.images || [];
+    let finalMetalImages = {
+      yellowGold: [],
+      whiteGold: [],
+      roseGold: [],
+      silver: [],
+      platinum: []
+    };
+
+    if (rawBody.existingMetalImages) {
+      const existingMetal = safeParseJSON(rawBody.existingMetalImages, {});
+      finalMetalImages.yellowGold = existingMetal.yellowGold || [];
+      finalMetalImages.whiteGold = existingMetal.whiteGold || [];
+      finalMetalImages.roseGold = existingMetal.roseGold || [];
+      finalMetalImages.silver = existingMetal.silver || [];
+      finalMetalImages.platinum = existingMetal.platinum || [];
+    } else if (existing.metalImages) {
+      finalMetalImages.yellowGold = existing.metalImages.yellowGold || [];
+      finalMetalImages.whiteGold = existing.metalImages.whiteGold || [];
+      finalMetalImages.roseGold = existing.metalImages.roseGold || [];
+      finalMetalImages.silver = existing.metalImages.silver || [];
+      finalMetalImages.platinum = existing.metalImages.platinum || [];
     }
 
     if (req.files) {
-      if (req.files.images) {
-        const newImages = [];
-        for (const file of req.files.images) {
+      if (req.files.images_yellowGold) {
+        for (const file of req.files.images_yellowGold) {
           const uploadRes = await uploadOnCloudinary(file.path);
-          if (uploadRes) {
-            newImages.push(uploadRes.secure_url);
-          }
+          if (uploadRes) finalMetalImages.yellowGold.push(uploadRes.secure_url);
         }
-        finalImages = [...finalImages, ...newImages];
+      }
+      if (req.files.images_whiteGold) {
+        for (const file of req.files.images_whiteGold) {
+          const uploadRes = await uploadOnCloudinary(file.path);
+          if (uploadRes) finalMetalImages.whiteGold.push(uploadRes.secure_url);
+        }
+      }
+      if (req.files.images_roseGold) {
+        for (const file of req.files.images_roseGold) {
+          const uploadRes = await uploadOnCloudinary(file.path);
+          if (uploadRes) finalMetalImages.roseGold.push(uploadRes.secure_url);
+        }
+      }
+      if (req.files.images_silver) {
+        for (const file of req.files.images_silver) {
+          const uploadRes = await uploadOnCloudinary(file.path);
+          if (uploadRes) finalMetalImages.silver.push(uploadRes.secure_url);
+        }
+      }
+      if (req.files.images_platinum) {
+        for (const file of req.files.images_platinum) {
+          const uploadRes = await uploadOnCloudinary(file.path);
+          if (uploadRes) finalMetalImages.platinum.push(uploadRes.secure_url);
+        }
       }
       if (req.files.sizeChart) {
         const uploadRes = await updateOnCloudinary(existing.sizeChart, req.files.sizeChart[0].path);
@@ -477,7 +541,7 @@ const updateProduct = async (req, res) => {
       }
     }
 
-    updateData.images = finalImages;
+    updateData.metalImages = finalMetalImages;
 
     await populatePricingAndDiamonds(updateData, req.body, id);
 

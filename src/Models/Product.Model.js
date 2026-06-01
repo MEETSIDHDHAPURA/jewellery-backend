@@ -33,8 +33,15 @@ const productSchema = new mongoose.Schema(
       type: Number,
       required: true,
     },
-    images: {
-      type: [String],
+    metalImages: {
+      type: mongoose.Schema.Types.Mixed,
+      default: {
+        yellowGold: [],
+        whiteGold: [],
+        roseGold: [],
+        silver: [],
+        platinum: []
+      }
     },
     sizeChart: {
       type: String, // URL for Image/PDF

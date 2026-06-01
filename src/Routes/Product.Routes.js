@@ -7,7 +7,11 @@ const upload = require("../Middlewares/Multer.middleware");
 router.post(
   "/",
   upload.fields([
-    { name: "images", maxCount: 10 },
+    { name: "images_yellowGold", maxCount: 10 },
+    { name: "images_whiteGold", maxCount: 10 },
+    { name: "images_roseGold", maxCount: 10 },
+    { name: "images_silver", maxCount: 10 },
+    { name: "images_platinum", maxCount: 10 },
     { name: "sizeChart", maxCount: 1 },
     { name: "certificate", maxCount: 1 },
   ]),
@@ -17,7 +21,11 @@ router.post(
 router.post(
   "/create",
   upload.fields([
-    { name: "images", maxCount: 10 },
+    { name: "images_yellowGold", maxCount: 10 },
+    { name: "images_whiteGold", maxCount: 10 },
+    { name: "images_roseGold", maxCount: 10 },
+    { name: "images_silver", maxCount: 10 },
+    { name: "images_platinum", maxCount: 10 },
     { name: "sizeChart", maxCount: 1 },
     { name: "certificate", maxCount: 1 },
   ]),
@@ -34,7 +42,11 @@ router.get("/get/:id", productController.getProductById);
 router.put(
   "/:id",
   upload.fields([
-    { name: "images", maxCount: 10 },
+    { name: "images_yellowGold", maxCount: 10 },
+    { name: "images_whiteGold", maxCount: 10 },
+    { name: "images_roseGold", maxCount: 10 },
+    { name: "images_silver", maxCount: 10 },
+    { name: "images_platinum", maxCount: 10 },
     { name: "sizeChart", maxCount: 1 },
     { name: "certificate", maxCount: 1 },
   ]),
@@ -44,7 +56,11 @@ router.put(
 router.put(
   "/update/:id",
   upload.fields([
-    { name: "images", maxCount: 10 },
+    { name: "images_yellowGold", maxCount: 10 },
+    { name: "images_whiteGold", maxCount: 10 },
+    { name: "images_roseGold", maxCount: 10 },
+    { name: "images_silver", maxCount: 10 },
+    { name: "images_platinum", maxCount: 10 },
     { name: "sizeChart", maxCount: 1 },
     { name: "certificate", maxCount: 1 },
   ]),
