@@ -19,6 +19,7 @@ const pricingModifierRoutes = require("./Routes/PricingModifier.Routes");
 const diamondPriceRoutes = require("./Routes/DiamondPrice.routes");
 const bannerRoutes = require("./Routes/Banner.Routes");
 const homepageSectionRoutes = require("./Routes/LandingPage.Routes");
+const customDesignRoutes = require("./Routes/CustomDesign.Routes");
 
 app.use(
   cors({
@@ -52,5 +53,6 @@ app.use("/api/v1/diamond-price", diamondPriceRoutes);
 app.use("/api/v1/banner", bannerRoutes);
 app.use("/admin", homepageSectionRoutes);
 app.use("/api/v1/admin", homepageSectionRoutes);
+app.use("/api/v1/custom-design", customDesignRoutes);
 
 module.exports = app;
