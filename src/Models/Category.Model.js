@@ -14,6 +14,10 @@ const categorySchema = new mongoose.Schema(
     image: {
       type: String,
     },
+    subcategories: {
+      type: [String],
+      default: [],
+    },
     isActive: {
       type: Boolean,
       default: true,

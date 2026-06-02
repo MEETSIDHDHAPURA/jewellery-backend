@@ -6,7 +6,7 @@ const { uploadOnCloudinary, updateOnCloudinary, deleteFromCloudinary } = require
 // Create Category
 const createCategory = async (req, res) => {
   try {
-    const { name, description, image } = req.body;
+    const { name, description, image, subcategories } = req.body;
 
     if (!name || !name.trim()) {
       throw new ApiError(400, "Category name is required");
@@ -29,10 +29,29 @@ const createCategory = async (req, res) => {
       }
     }
 
+    let subcategoriesArr = [];
+    if (subcategories) {
+      if (Array.isArray(subcategories)) {
+        subcategoriesArr = subcategories.map(s => s.trim()).filter(Boolean);
+      } else if (typeof subcategories === "string") {
+        try {
+          const parsed = JSON.parse(subcategories);
+          if (Array.isArray(parsed)) {
+            subcategoriesArr = parsed.map(s => s.trim()).filter(Boolean);
+          } else {
+            subcategoriesArr = subcategories.split(",").map(s => s.trim()).filter(Boolean);
+          }
+        } catch (e) {
+          subcategoriesArr = subcategories.split(",").map(s => s.trim()).filter(Boolean);
+        }
+      }
+    }
+
     const category = await Category.create({
       name: trimmedName,
       description,
       image: imageUrl,
+      subcategories: subcategoriesArr,
     });
 
     res.status(201).json(new ApiResponse(201, category, "Category created successfully"));
@@ -62,7 +81,7 @@ const getAllCategories = async (req, res) => {
 const updateCategory = async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, description, image, isActive } = req.body;
+    const { name, description, image, isActive, subcategories } = req.body;
 
     const category = await Category.findById(id);
     if (!category) {
@@ -98,6 +117,25 @@ const updateCategory = async (req, res) => {
     }
     
     if (typeof isActive !== "undefined") category.isActive = isActive;
+
+    if (typeof subcategories !== "undefined") {
+      let subcategoriesArr = [];
+      if (Array.isArray(subcategories)) {
+        subcategoriesArr = subcategories.map(s => s.trim()).filter(Boolean);
+      } else if (typeof subcategories === "string") {
+        try {
+          const parsed = JSON.parse(subcategories);
+          if (Array.isArray(parsed)) {
+            subcategoriesArr = parsed.map(s => s.trim()).filter(Boolean);
+          } else {
+            subcategoriesArr = subcategories.split(",").map(s => s.trim()).filter(Boolean);
+          }
+        } catch (e) {
+          subcategoriesArr = subcategories.split(",").map(s => s.trim()).filter(Boolean);
+        }
+      }
+      category.subcategories = subcategoriesArr;
+    }
 
     await category.save();
 

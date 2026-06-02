@@ -9,13 +9,26 @@ const updateNavigation = async (req, res) => {
 
     if (!categoryId) throw new ApiError(400, "Category ID is required");
 
+    const parseField = (field) => {
+      if (!field) return [];
+      if (Array.isArray(field)) return field;
+      if (typeof field === "string") {
+        try {
+          return JSON.parse(field);
+        } catch (e) {
+          return [];
+        }
+      }
+      return [];
+    };
+
     const nav = await Navigation.findOneAndUpdate(
       { category: categoryId },
       {
-        styles: styles ? JSON.parse(styles) : [],
-        shapes: shapes ? JSON.parse(shapes) : [],
-        metals: metals ? JSON.parse(metals) : [],
-        priceRanges: priceRanges ? JSON.parse(priceRanges) : [],
+        styles: parseField(styles),
+        shapes: parseField(shapes),
+        metals: parseField(metals),
+        priceRanges: parseField(priceRanges),
       },
       { upsert: true, returnDocument: "after" }
     );

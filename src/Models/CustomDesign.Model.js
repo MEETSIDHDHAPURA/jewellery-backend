@@ -52,13 +52,15 @@ const customDesignSchema = new mongoose.Schema(
     referenceImage: {
       type: String,
     },
-    isNew: {
-      type: Boolean,
-      default: true,
+    status: {
+      type: String,
+      enum: ["Pending", "In Progress", "Resolved"],
+      default: "Pending",
     },
   },
   {
     timestamps: true,
+    suppressReservedKeysWarning: true,
   }
 );
 

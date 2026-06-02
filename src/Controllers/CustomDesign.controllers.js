@@ -4,21 +4,39 @@ const { uploadOnCloudinary, deleteFromCloudinary } = require("../Utils/Cloudinar
 // Get all custom design requests
 exports.getAllCustomDesigns = async (req, res) => {
   try {
-    const { isNew, page = 1, limit = 10 } = req.query;
+    const { status, search, page, limit } = req.query;
 
     const filter = {};
-    if (isNew !== undefined) {
-      filter.isNew = isNew === "true";
+    if (status && status !== "All") {
+      filter.status = status;
     }
 
-    const skip = (parseInt(page) - 1) * parseInt(limit);
+    if (search) {
+      const searchRegex = new RegExp(search, "i");
+      filter.$or = [
+        { name: searchRegex },
+        { email: searchRegex },
+        { phone: searchRegex },
+        { jewelryType: searchRegex },
+        { stylePreference: searchRegex },
+        { shapeDesign: searchRegex },
+      ];
+    }
 
-    const [designs, total] = await Promise.all([
+    const pageNum = page ? parseInt(page) : 1;
+    const limitNum = limit ? parseInt(limit) : 10000;
+    const skip = (pageNum - 1) * limitNum;
+
+    const [designs, total, totalAll, countPending, countInProgress, countResolved] = await Promise.all([
       CustomDesign.find(filter)
         .sort({ createdAt: -1 })
         .skip(skip)
-        .limit(parseInt(limit)),
+        .limit(limitNum),
       CustomDesign.countDocuments(filter),
+      CustomDesign.countDocuments({}),
+      CustomDesign.countDocuments({ $or: [{ status: "Pending" }, { status: { $exists: false } }, { status: "" }] }),
+      CustomDesign.countDocuments({ status: "In Progress" }),
+      CustomDesign.countDocuments({ status: "Resolved" }),
     ]);
 
     return res.status(200).json({
@@ -26,8 +44,14 @@ exports.getAllCustomDesigns = async (req, res) => {
       data: {
         designs,
         total,
-        page: parseInt(page),
-        totalPages: Math.ceil(total / parseInt(limit)),
+        page: pageNum,
+        totalPages: Math.ceil(total / limitNum),
+        counts: {
+          total: totalAll,
+          pending: countPending,
+          inProgress: countInProgress,
+          resolved: countResolved,
+        }
       },
     });
   } catch (error) {
@@ -135,20 +159,22 @@ exports.createCustomDesign = async (req, res) => {
   }
 };
 
-// Update custom design status/isNew
+// Update custom design status
 exports.updateCustomDesignStatus = async (req, res) => {
   try {
     const { id } = req.params;
-    const { isNew } = req.body;
+    const { status } = req.body;
 
-    const updateData = {};
-    if (isNew !== undefined) {
-      updateData.isNew = isNew;
+    if (status === undefined) {
+      return res.status(400).json({
+        success: false,
+        message: "Status is required to update custom design status",
+      });
     }
 
     const design = await CustomDesign.findByIdAndUpdate(
       id,
-      updateData,
+      { status },
       { returnDocument: "after", runValidators: true }
     );
 

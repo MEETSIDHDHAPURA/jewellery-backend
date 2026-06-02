@@ -27,13 +27,15 @@ const supportSchema = new mongoose.Schema(
       required: true,
       trim: true,
     },
-    isNew: {
-      type: Boolean,
-      default: true,
+    status: {
+      type: String,
+      enum: ["Pending", "In Progress", "Resolved"],
+      default: "Pending",
     },
   },
   {
     timestamps: true,
+    suppressReservedKeysWarning: true,
   }
 );
 
