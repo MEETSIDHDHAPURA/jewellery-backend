@@ -41,6 +41,18 @@ const customDesignSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
+    occasion: {
+      type: String,
+      trim: true,
+    },
+    stoneType: {
+      type: String,
+      trim: true,
+    },
+    timeline: {
+      type: String,
+      trim: true,
+    },
     budgetRange: {
       type: String,
       default: "",
