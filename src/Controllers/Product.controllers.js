@@ -296,7 +296,28 @@ const getAllProducts = async (req, res) => {
       filter.isActive = true;
     }
 
-    if (category) filter.category = category;
+    if (category) {
+      const mongoose = require("mongoose");
+      if (mongoose.Types.ObjectId.isValid(category)) {
+        filter.category = category;
+      } else {
+        const Category = require("../Models/Category.Model");
+        let foundCategory = await Category.findOne({
+          name: { $regex: new RegExp(`^${category}$`, "i") }
+        });
+        if (!foundCategory && category.toLowerCase().endsWith('s')) {
+          const singular = category.slice(0, -1);
+          foundCategory = await Category.findOne({
+            name: { $regex: new RegExp(`^${singular}$`, "i") }
+          });
+        }
+        if (foundCategory) {
+          filter.category = foundCategory._id;
+        } else {
+          filter.category = new mongoose.Types.ObjectId();
+        }
+      }
+    }
     if (gender) filter.gender = gender;
     if (isFeatured) filter.isFeatured = isFeatured === 'true';
     if (occasion) filter.occasion = { $in: Array.isArray(occasion) ? occasion : [occasion] };
