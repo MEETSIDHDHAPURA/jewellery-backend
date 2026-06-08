@@ -32,6 +32,8 @@ router.post(
   productController.createProduct
 );
 
+router.post("/bulk", productController.bulkCreateProducts);
+
 router.get("/", productController.getAllProducts);
 router.get("/all", productController.getAllProducts);
 

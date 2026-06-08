@@ -151,6 +151,18 @@ const productSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    isNew: {
+      type: Boolean,
+      default: false,
+    },
+    settingType: {
+      type: String,
+      trim: true,
+    },
+    backingType: {
+      type: String,
+      trim: true,
+    },
   },
   { timestamps: true }
 );

@@ -4,6 +4,9 @@ const MetalRate = require("../Models/MetalRate.Model");
 const MakingCharge = require("../Models/MakingCharge.Model");
 const GlobalConfig = require("../Models/GlobalConfig.Model");
 const PricingModifier = require("../Models/PricingModifier.Model");
+const Category = require("../Models/Category.Model");
+const DiamondPrice = require("../Models/DiamondPrice.Model");
+const mongoose = require("mongoose");
 const ApiResponse = require("../Utils/ApiResponse");
 const ApiError = require("../Utils/ApiError");
 const { uploadOnCloudinary, updateOnCloudinary } = require("../Utils/Cloudinary");
@@ -45,7 +48,6 @@ const parseBoolean = (val, defaultVal = false) => {
 const populatePricingAndDiamonds = async (productData, body, productId = null) => {
   // 1. Populate makingCharge, basePrice, and silverBasePrice from MakingCharge collection
   try {
-    const MakingCharge = require("../Models/MakingCharge.Model");
     const goldCharge = await MakingCharge.findOne({ metal: "Yellow Gold" });
     const silverCharge = await MakingCharge.findOne({ metal: "Silver" });
 
@@ -83,7 +85,6 @@ const populatePricingAndDiamonds = async (productData, body, productId = null) =
     let allowedColors = typeof body.allowedColors === "string" ? safeParseJSON(body.allowedColors, []) : (body.allowedColors || []);
 
     if (productId && (!diamondType || !diamondShape || allowedCarats.length === 0)) {
-      const Product = require("../Models/Product.Model");
       const existing = await Product.findById(productId);
       if (existing) {
         if (!diamondType) diamondType = existing.diamondOptions && existing.diamondOptions[0] ? existing.diamondOptions[0].diamondType : "";
@@ -98,8 +99,6 @@ const populatePricingAndDiamonds = async (productData, body, productId = null) =
     }
 
     if (diamondType && diamondShape && allowedCarats.length > 0) {
-      const DiamondPrice = require("../Models/DiamondPrice.Model");
-      
       const caratNumbers = allowedCarats.map(c => Number(c) || parseFloat(c));
 
       const matchingDiamonds = await DiamondPrice.find({
@@ -134,11 +133,12 @@ const createProduct = async (req, res) => {
     const {
       title, slug, description, category, subCategory, makingCharge, makingChargeType,
       diamondOptions, variantConfig,
-      occasion, gender, isFeatured, isActive, Price, isSoldOut,
+      occasion, gender, isFeatured, isActive, Price, isSoldOut, isNew,
       basePrice, silverBasePrice, weight,
       weight10K, weight14K, weight18K, weight22K, weightSilver, weightPlatinum,
       allowedMetals, allowedCarats, allowedClarities, allowedColors, allowedSizes,
-      metaTitle, metaDescription, keywords, certificate
+      metaTitle, metaDescription, keywords, certificate,
+      settingType, backingType
     } = req.body;
 
     let sizeChart = "";
@@ -203,7 +203,7 @@ const createProduct = async (req, res) => {
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, "-")
         .replace(/(^-|-$)+/g, "");
-      
+
       const existingProduct = await Product.findOne({ slug: finalSlug });
       if (existingProduct) {
         finalSlug = `${finalSlug}-${Math.random().toString(36).substring(2, 7)}`;
@@ -233,6 +233,9 @@ const createProduct = async (req, res) => {
       isFeatured: parseBoolean(isFeatured, false),
       isActive: parseBoolean(isActive, true),
       isSoldOut: parseBoolean(isSoldOut, false),
+      isNew: parseBoolean(isNew, false),
+      settingType: settingType || "",
+      backingType: backingType || "",
       Price: parseNumber(Price, 0),
       basePrice: parseNumber(basePrice, 0),
       silverBasePrice: parseNumber(silverBasePrice, 0),
@@ -261,9 +264,9 @@ const createProduct = async (req, res) => {
     if (variantConfig) {
       const config = typeof variantConfig === "string" ? JSON.parse(variantConfig) : variantConfig;
       const variantData = generateVariantCombinations(product._id, title, config);
-      
+
       const createdVariants = await ProductVariant.insertMany(variantData);
-      
+
       // 3. Link variants back to product
       product.variants = createdVariants.map(v => v._id);
       await product.save();
@@ -280,8 +283,8 @@ const createProduct = async (req, res) => {
  */
 const getAllProducts = async (req, res) => {
   try {
-    const { 
-      category, occasion, gender, metal, purity, minPrice, maxPrice, 
+    const {
+      category, occasion, gender, metal, purity, minPrice, maxPrice,
       isFeatured, search, page = 1, limit = 10, isActive
     } = req.query;
 
@@ -297,11 +300,9 @@ const getAllProducts = async (req, res) => {
     }
 
     if (category) {
-      const mongoose = require("mongoose");
       if (mongoose.Types.ObjectId.isValid(category)) {
         filter.category = category;
       } else {
-        const Category = require("../Models/Category.Model");
         let foundCategory = await Category.findOne({
           name: { $regex: new RegExp(`^${category}$`, "i") }
         });
@@ -340,22 +341,10 @@ const getAllProducts = async (req, res) => {
       .limit(Number(limit))
       .lean();
 
-    const latestProducts = await Product.find(filter)
-      .sort({ createdAt: -1 })
-      .limit(5)
-      .select("_id")
-      .lean();
-    const latestIds = latestProducts.map(p => p._id.toString());
-
-    const productsWithIsNew = products.map(product => ({
-      ...product,
-      isNew: latestIds.includes(product._id.toString())
-    }));
-
     const total = await Product.countDocuments(filter);
 
     res.status(200).json(new ApiResponse(200, {
-      products: productsWithIsNew,
+      products,
       pagination: { total, page: Number(page), limit: Number(limit), pages: Math.ceil(total / limit) }
     }, "Products fetched successfully"));
   } catch (error) {
@@ -458,7 +447,8 @@ const updateProduct = async (req, res) => {
       "isFeatured",
       "isActive",
       "isDeleted",
-      "isSoldOut"
+      "isSoldOut",
+      "isNew"
     ];
 
     // Process all keys in req.body
@@ -486,7 +476,7 @@ const updateProduct = async (req, res) => {
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, "-")
         .replace(/(^-|-$)+/g, "");
-      
+
       const existingProduct = await Product.findOne({ slug: generatedSlug, _id: { $ne: id } });
       if (existingProduct) {
         generatedSlug = `${generatedSlug}-${Math.random().toString(36).substring(2, 7)}`;
@@ -568,7 +558,7 @@ const updateProduct = async (req, res) => {
 
     const product = await Product.findByIdAndUpdate(id, updateData, { returnDocument: "after" })
       .populate("variants");
-      
+
     if (!product) throw new ApiError(404, "Product not found");
 
     res.status(200).json(new ApiResponse(200, product, "Product updated successfully"));
@@ -584,11 +574,236 @@ const deleteProduct = async (req, res) => {
   try {
     const product = await Product.findByIdAndUpdate(req.params.id, { isDeleted: true }, { returnDocument: "after" });
     if (!product) throw new ApiError(404, "Product not found");
-    
+
     // Also deactivate variants
     await ProductVariant.updateMany({ productId: product._id }, { isActive: false });
 
     res.status(200).json(new ApiResponse(200, {}, "Product deleted successfully"));
+  } catch (error) {
+    res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));
+  }
+};
+
+/**
+ * Bulk Create Products
+ */
+const bulkCreateProducts = async (req, res) => {
+  try {
+    const { products } = req.body;
+    if (!products || !Array.isArray(products)) {
+      throw new ApiError(400, "Invalid products array");
+    }
+
+    const errors = [];
+    const validatedProducts = [];
+    const categoryCache = {};
+
+    // Helper to safely parse lists
+    const formatList = (val) => {
+      if (!val) return [];
+      if (Array.isArray(val)) return val;
+      if (typeof val === "string") {
+        try {
+          const parsed = JSON.parse(val);
+          if (Array.isArray(parsed)) return parsed;
+        } catch (e) {
+          // Fall through
+        }
+        return val.split(",").map(item => item.trim()).filter(Boolean);
+      }
+      return [val];
+    };
+
+    // Helper to safely parse image lists
+    const parseImageUrls = (val) => {
+      if (!val) return [];
+      if (Array.isArray(val)) return val;
+      if (typeof val === "string") {
+        try {
+          const parsed = JSON.parse(val);
+          if (Array.isArray(parsed)) return parsed;
+        } catch (e) {
+          // Fall through
+        }
+        return val.split(",").map(u => u.trim()).filter(Boolean);
+      }
+      return [];
+    };
+
+    // 1. Validation & Category Lookup Phase
+    for (let i = 0; i < products.length; i++) {
+      const pData = products[i];
+      const rowNum = i + 1;
+
+      try {
+        const { title, description, category } = pData;
+
+        if (!title || !title.trim()) {
+          throw new Error(`Row ${rowNum}: Title is required`);
+        }
+        if (!description || !description.trim()) {
+          throw new Error(`Row ${rowNum}: Description is required`);
+        }
+        if (!category) {
+          throw new Error(`Row ${rowNum}: Category is required`);
+        }
+
+        // Look up category
+        let categoryId = null;
+        const cacheKey = String(category).trim().toLowerCase();
+        if (categoryCache[cacheKey]) {
+          categoryId = categoryCache[cacheKey];
+        } else {
+          if (mongoose.Types.ObjectId.isValid(category)) {
+            const cat = await Category.findById(category);
+            if (cat) {
+              categoryId = cat._id;
+            }
+          }
+
+          if (!categoryId) {
+            const cat = await Category.findOne({
+              name: { $regex: new RegExp(`^${category.trim()}$`, "i") }
+            });
+            if (cat) {
+              categoryId = cat._id;
+            }
+          }
+
+          if (!categoryId) {
+            throw new Error(`Row ${rowNum}: Category '${category}' not found.`);
+          }
+          categoryCache[cacheKey] = categoryId;
+        }
+
+        // Store pre-validated info along with original row data
+        validatedProducts.push({
+          pData,
+          rowNum,
+          categoryId
+        });
+      } catch (err) {
+        errors.push({ row: rowNum, error: err.message });
+      }
+    }
+
+    if (errors.length > 0) {
+      return res.status(400).json(new ApiError(400, "Validation failed", errors));
+    }
+
+    // 2. Database Insertion Phase
+    const createdProducts = [];
+
+    for (const item of validatedProducts) {
+      const { pData, categoryId } = item;
+      const {
+        title, description, subCategory,
+        Price, makingCharge, makingChargeType,
+        occasion, gender, isFeatured, isActive, isSoldOut,
+        basePrice, silverBasePrice, weight,
+        weight10K, weight14K, weight18K, weight22K, weightSilver, weightPlatinum,
+        allowedMetals, allowedCarats, allowedClarities, allowedColors, allowedSizes,
+        metaTitle, metaDescription, keywords, certificate,
+        diamondType, diamondShape,
+        metalImages_yellowGold, metalImages_whiteGold, metalImages_roseGold, metalImages_silver, metalImages_platinum
+      } = pData;
+
+      // Generate unique slug
+      let finalSlug = title
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/(^-|-$)+/g, "");
+
+      const existingProduct = await Product.findOne({ slug: finalSlug });
+      if (existingProduct) {
+        finalSlug = `${finalSlug}-${Math.random().toString(36).substring(2, 7)}`;
+      }
+
+      const metalsParsed = formatList(allowedMetals);
+      const caratsParsed = formatList(allowedCarats);
+      const claritiesParsed = formatList(allowedClarities);
+      const colorsParsed = formatList(allowedColors);
+      const sizesParsed = formatList(allowedSizes);
+      const occasionsParsed = formatList(occasion);
+      const keywordsParsed = formatList(keywords);
+
+      const metalImages = {
+        yellowGold: parseImageUrls(metalImages_yellowGold),
+        whiteGold: parseImageUrls(metalImages_whiteGold),
+        roseGold: parseImageUrls(metalImages_roseGold),
+        silver: parseImageUrls(metalImages_silver),
+        platinum: parseImageUrls(metalImages_platinum)
+      };
+
+      const productData = {
+        title,
+        slug: finalSlug,
+        description,
+        category: categoryId,
+        subCategory: subCategory || "",
+        makingCharge: parseNumber(makingCharge, 0),
+        makingChargeType: makingChargeType || "per_gram",
+        metalImages,
+        sizeChart: pData.sizeChart || "",
+        certificate: certificate || "",
+        diamondOptions: [],
+        occasion: occasionsParsed,
+        gender: gender || "Women",
+        isFeatured: parseBoolean(isFeatured, false),
+        isActive: parseBoolean(isActive, true),
+        isSoldOut: parseBoolean(isSoldOut, false),
+        Price: parseNumber(Price, 0),
+        basePrice: parseNumber(basePrice, 0),
+        silverBasePrice: parseNumber(silverBasePrice, 0),
+        weight: parseNumber(weight, 0),
+        weight10K: parseNumber(weight10K, 0),
+        weight14K: parseNumber(weight14K, 0),
+        weight18K: parseNumber(weight18K, 0),
+        weight22K: parseNumber(weight22K, 0),
+        weightSilver: parseNumber(weightSilver, 0),
+        weightPlatinum: parseNumber(weightPlatinum, 0),
+        allowedMetals: metalsParsed,
+        allowedCarats: caratsParsed,
+        allowedClarities: claritiesParsed,
+        allowedColors: colorsParsed,
+        allowedSizes: sizesParsed,
+        metaTitle: metaTitle || "",
+        metaDescription: metaDescription || "",
+        keywords: keywordsParsed
+      };
+
+      // Populate pricing configurations & diamond options automatically
+      const mockBody = {
+        diamondType: diamondType || "",
+        diamondShape: diamondShape || "",
+        allowedCarats: caratsParsed,
+        allowedClarities: claritiesParsed,
+        allowedColors: colorsParsed
+      };
+      await populatePricingAndDiamonds(productData, mockBody);
+
+      const product = await Product.create(productData);
+
+      // Generate variant combinations
+      if (metalsParsed.length > 0 && caratsParsed.length > 0) {
+        const config = {
+          metals: metalsParsed,
+          purities: caratsParsed,
+          sizes: sizesParsed,
+          sizeType: sizesParsed.length > 0 ? "standard" : "none",
+          baseWeight: productData.weight || 0,
+          basePrice: productData.Price || 0
+        };
+        const variantData = generateVariantCombinations(product._id, title, config);
+        const createdVariants = await ProductVariant.insertMany(variantData);
+        product.variants = createdVariants.map(v => v._id);
+        await product.save();
+      }
+
+      createdProducts.push(product);
+    }
+
+    res.status(201).json(new ApiResponse(201, createdProducts, `${createdProducts.length} products imported successfully`));
   } catch (error) {
     res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));
   }
@@ -600,4 +815,5 @@ module.exports = {
   getProductById,
   updateProduct,
   deleteProduct,
+  bulkCreateProducts,
 };
