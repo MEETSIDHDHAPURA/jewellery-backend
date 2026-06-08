@@ -15,6 +15,12 @@ const productSchema = new mongoose.Schema(
       unique: true,
       lowercase: true,
     },
+    sku: {
+      type: String,
+      unique: true,
+      sparse: true,
+      trim: true,
+    },
     description: {
       type: String, // Rich text content
       required: true,
@@ -166,5 +172,25 @@ const productSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+productSchema.pre("save", async function (next) {
+  if (!this.sku) {
+    let unique = false;
+    let attempts = 0;
+    while (!unique && attempts < 10) {
+      const randomNum = Math.floor(10000 + Math.random() * 90000); // 5-digit random number
+      const randomLetters = Math.random().toString(36).substring(2, 5).toUpperCase(); // 3-letter code
+      const generatedSku = `SKU-${randomNum}${randomLetters}`;
+
+      const existingProduct = await mongoose.models.Product.findOne({ sku: generatedSku });
+      if (!existingProduct) {
+        this.sku = generatedSku;
+        unique = true;
+      }
+      attempts++;
+    }
+  }
+  next();
+});
 
 module.exports = mongoose.model("Product", productSchema);
