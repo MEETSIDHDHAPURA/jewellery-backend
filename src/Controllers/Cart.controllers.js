@@ -3,6 +3,18 @@ const Coupon = require("../Models/Coupon.Model");
 const ApiResponse = require("../Utils/ApiResponse");
 const ApiError = require("../Utils/ApiError");
 
+// Helper to get string representation of ObjectId (populated or unpopulated)
+const getObjectIdString = (field) => {
+  if (!field) return "";
+  return field._id ? field._id.toString() : field.toString();
+};
+
+// Helper to normalize variant string values for comparison
+const normalizeVal = (val) => {
+  if (val === undefined || val === null) return "";
+  return String(val).toLowerCase().replace(/[\s_-]/g, "");
+};
+
 // Helper to get user ID from request (token or body/query)
 const getUserId = (req) => {
   const userId = req.user?._id || req.body.userId || req.query.userId || req.params.userId;
@@ -122,7 +134,7 @@ const addToCart = async (req, res) => {
     if (diamond) {
       // Check if this loose diamond is already in the cart
       const existingItemIndex = cart.items.findIndex(
-        (item) => item.diamond && item.diamond.toString() === diamond.toString()
+        (item) => item.diamond && getObjectIdString(item.diamond) === diamond.toString()
       );
 
       if (existingItemIndex > -1) {
@@ -144,13 +156,13 @@ const addToCart = async (req, res) => {
       const existingItemIndex = cart.items.findIndex(
         (item) =>
           item.product &&
-          item.product.toString() === product.toString() &&
-          item.metal === metal &&
-          (item.carat || "") === (carat || "") &&
-          (item.clarity || "") === (clarity || "") &&
-          (item.color || "") === (color || "") &&
-          (item.size || "") === (size || "") &&
-          (item.diamondType || "") === (diamondType || "")
+          getObjectIdString(item.product) === product.toString() &&
+          normalizeVal(item.metal) === normalizeVal(metal) &&
+          normalizeVal(item.carat) === normalizeVal(carat) &&
+          normalizeVal(item.clarity) === normalizeVal(clarity) &&
+          normalizeVal(item.color) === normalizeVal(color) &&
+          normalizeVal(item.size) === normalizeVal(size) &&
+          normalizeVal(item.diamondType) === normalizeVal(diamondType)
       );
 
       if (existingItemIndex > -1) {
