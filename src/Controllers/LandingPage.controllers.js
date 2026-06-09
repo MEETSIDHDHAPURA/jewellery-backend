@@ -60,8 +60,8 @@ const updateDisplayModeHomepageSection = async (req, res) => {
         throw new ApiError(400, "For featured_products, display_mode must be 'featured' or 'best_sellers'");
       }
     } else if (section_key === "new_arrivals") {
-      if (displayMode !== "new_arrivals" && displayMode !== "trending") {
-        throw new ApiError(400, "For new_arrivals, display_mode must be 'new_arrivals' or 'trending'");
+      if (displayMode !== "new_arrivals" && displayMode !== "best_deal") {
+        throw new ApiError(400, "For new_arrivals, display_mode must be 'new_arrivals' or 'best_deal'");
       }
     } else {
       throw new ApiError(400, `Section '${section_key}' does not support customizable display modes`);
@@ -209,25 +209,84 @@ const getLandingPageData = async (req, res) => {
     }
 
 
-    // 6. Query new arrivals (last 5 added active products)
+    // 6. Query new arrivals / best deals
     let newArrivals = [];
     if (sectionStatus.new_arrivals) {
       const newArrivalsSection = sections.find(s => s.section_key === "new_arrivals");
       const displayMode = newArrivalsSection ? newArrivalsSection.display_mode : "new_arrivals";
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
 
-      newArrivals = await Product.find({ 
-        isActive: true, 
-        isDeleted: false 
-      })
-      .populate("category", "name")
-      .sort({ createdAt: -1 })
-      .limit(5)
-      .lean();
+      if (displayMode === "best_deal") {
+        // Query products with isBestDeal: true
+        newArrivals = await Product.find({
+          isBestDeal: true,
+          isActive: true,
+          isDeleted: false
+        })
+        .populate("category", "name")
+        .sort({ createdAt: -1 })
+        .limit(10)
+        .lean();
 
-      if (displayMode === "trending") {
-        newArrivals = newArrivals.map(p => ({ ...p, displayMode: "trending", isTrending: true }));
+        // Fallback: random 10 active products if no best deal products
+        if (newArrivals.length === 0) {
+          const allActive = await Product.find({ isActive: true, isDeleted: false })
+            .populate("category", "name")
+            .lean();
+          for (let i = allActive.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [allActive[i], allActive[j]] = [allActive[j], allActive[i]];
+          }
+          newArrivals = allActive.slice(0, 10);
+        }
+
+        // Map isNew dynamically + tag as best_deal
+        newArrivals = newArrivals.map(p => {
+          const isWithin30 = p.createdAt ? (Date.now() - new Date(p.createdAt).getTime()) < 30 * 24 * 60 * 60 * 1000 : false;
+          return {
+            ...p,
+            isNew: isWithin30 || p.isNew,
+            displayMode: "best_deal",
+            isBestDeal: true
+          };
+        });
       } else {
-        newArrivals = newArrivals.map(p => ({ ...p, displayMode: "new_arrivals", isTrending: false }));
+        // New Arrivals mode: isNew true or created within 30 days
+        newArrivals = await Product.find({
+          $or: [
+            { isNew: true },
+            { createdAt: { $gte: thirtyDaysAgo } }
+          ],
+          isActive: true,
+          isDeleted: false
+        })
+        .populate("category", "name")
+        .sort({ createdAt: -1 })
+        .limit(10)
+        .lean();
+
+        // Fallback: last added 10 products
+        if (newArrivals.length === 0) {
+          newArrivals = await Product.find({
+            isActive: true,
+            isDeleted: false
+          })
+          .populate("category", "name")
+          .sort({ createdAt: -1 })
+          .limit(10)
+          .lean();
+        }
+
+        // Map isNew dynamically + tag as new_arrivals
+        newArrivals = newArrivals.map(p => {
+          const isWithin30 = p.createdAt ? (Date.now() - new Date(p.createdAt).getTime()) < 30 * 24 * 60 * 60 * 1000 : false;
+          return {
+            ...p,
+            isNew: isWithin30 || p.isNew,
+            displayMode: "new_arrivals",
+            isBestDeal: false
+          };
+        });
       }
     }
 

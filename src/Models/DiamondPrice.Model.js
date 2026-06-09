@@ -62,7 +62,7 @@ const diamondPriceSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-diamondPriceSchema.pre("save", async function (next) {
+diamondPriceSchema.pre("save", async function () {
   if (!this.sku) {
     let typePrefix = "LD";
     if (this.diamondType === "Natural") typePrefix = "ND";
@@ -85,7 +85,6 @@ diamondPriceSchema.pre("save", async function (next) {
       attempts++;
     }
   }
-  next();
 });
 
 const DiamondPrice = mongoose.model("DiamondPrice", diamondPriceSchema);

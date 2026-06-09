@@ -133,7 +133,7 @@ const createProduct = async (req, res) => {
     const {
       title, slug, description, category, subCategory, makingCharge, makingChargeType,
       diamondOptions, variantConfig,
-      occasion, gender, isFeatured, isActive, Price, isSoldOut, isNew,
+      occasion, gender, isFeatured, isActive, Price, isSoldOut, isNew, isBestDeal,
       basePrice, silverBasePrice, weight,
       weight10K, weight14K, weight18K, weight22K, weightSilver, weightPlatinum,
       allowedMetals, allowedCarats, allowedClarities, allowedColors, allowedSizes,
@@ -234,6 +234,7 @@ const createProduct = async (req, res) => {
       isActive: parseBoolean(isActive, true),
       isSoldOut: parseBoolean(isSoldOut, false),
       isNew: parseBoolean(isNew, false),
+      isBestDeal: parseBoolean(isBestDeal, false),
       settingType: settingType || "",
       backingType: backingType || "",
       Price: parseNumber(Price, 0),
@@ -370,6 +371,12 @@ const getProductById = async (req, res) => {
       throw new ApiError(404, "Product not found");
     }
 
+    const isWithin30 = product.createdAt ? (Date.now() - new Date(product.createdAt).getTime()) < 30 * 24 * 60 * 60 * 1000 : false;
+    const mappedProduct = {
+      ...product,
+      isNew: isWithin30 || product.isNew
+    };
+
     // Extract available filters from variants for the frontend
     const variants = product.variants || [];
     const filters = {
@@ -388,7 +395,7 @@ const getProductById = async (req, res) => {
     ]);
 
     res.status(200).json(new ApiResponse(200, {
-      product,
+      product: mappedProduct,
       availableFilters: filters,
       pricingMetadata: {
         metalRates,
@@ -448,7 +455,8 @@ const updateProduct = async (req, res) => {
       "isActive",
       "isDeleted",
       "isSoldOut",
-      "isNew"
+      "isNew",
+      "isBestDeal"
     ];
 
     // Process all keys in req.body
@@ -553,6 +561,12 @@ const updateProduct = async (req, res) => {
     }
 
     updateData.metalImages = finalMetalImages;
+
+    // Enforce isNew logic: within 30 days of creation, isNew must remain false in the DB to dynamically evaluate as true.
+    const isWithin30Days = existing.createdAt ? (Date.now() - new Date(existing.createdAt).getTime()) < 30 * 24 * 60 * 60 * 1000 : false;
+    if (isWithin30Days) {
+      updateData.isNew = false;
+    }
 
     await populatePricingAndDiamonds(updateData, req.body, id);
 

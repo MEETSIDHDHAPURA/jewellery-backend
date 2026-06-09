@@ -140,7 +140,6 @@ const productSchema = new mongoose.Schema(
     metaTitle: String,
     metaDescription: String,
     keywords: [String],
-
     isFeatured: {
       type: Boolean,
       default: false,
@@ -161,6 +160,10 @@ const productSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    isBestDeal: {
+      type: Boolean,
+      default: false,
+    },
     settingType: {
       type: String,
       trim: true,
@@ -170,10 +173,10 @@ const productSchema = new mongoose.Schema(
       trim: true,
     },
   },
-  { timestamps: true }
+  { timestamps: true, suppressReservedKeysWarning: true }
 );
 
-productSchema.pre("save", async function (next) {
+productSchema.pre("save", async function () {
   if (!this.sku) {
     let unique = false;
     let attempts = 0;
@@ -190,7 +193,6 @@ productSchema.pre("save", async function (next) {
       attempts++;
     }
   }
-  next();
 });
 
 module.exports = mongoose.model("Product", productSchema);
