@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const bannerController = require("../Controllers/Banner.controllers");
-const upload = require("../Middlewares/Multer.middleware");
+const upload = require("../Middlewares/multer.middleware");
 
 router.post("/create", upload.single("image"), bannerController.createBanner);
 router.get("/all", bannerController.getAllBanners);

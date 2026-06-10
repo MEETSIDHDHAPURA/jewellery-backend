@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const blogController = require("../Controllers/Blog.controllers");
-const upload = require("../Middlewares/Multer.middleware");
+const upload = require("../Middlewares/multer.middleware");
 
 // Create with single image upload
 router.post("/create", upload.single("image"), blogController.createBlog);

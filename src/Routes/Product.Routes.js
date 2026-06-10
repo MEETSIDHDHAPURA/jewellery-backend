@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const productController = require("../Controllers/Product.controllers");
-const upload = require("../Middlewares/Multer.middleware");
+const upload = require("../Middlewares/multer.middleware");
 
 // Create with multi-image and size chart upload
 router.post(

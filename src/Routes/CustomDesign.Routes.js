@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const customDesignController = require("../Controllers/CustomDesign.controllers");
-const upload = require("../Middlewares/Multer.middleware");
+const upload = require("../Middlewares/multer.middleware");
 
 router.get("/all", customDesignController.getAllCustomDesigns);
 router.get("/get/:id", customDesignController.getCustomDesignById);
