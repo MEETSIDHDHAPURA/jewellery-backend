@@ -333,14 +333,34 @@ const getAllProducts = async (req, res) => {
     }
 
     const skip = (page - 1) * limit;
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
 
-    const products = await Product.find(filter)
-      .select("-isDeleted")
-      .populate("category", "name")
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(Number(limit))
-      .lean();
+    if (filter.category && typeof filter.category === 'string' && mongoose.Types.ObjectId.isValid(filter.category)) {
+      filter.category = new mongoose.Types.ObjectId(filter.category);
+    }
+
+    let products = await Product.aggregate([
+      { $match: filter },
+      {
+        $addFields: {
+          isNew: {
+            $or: [
+              { $eq: ["$isNew", true] },
+              { $gte: ["$createdAt", thirtyDaysAgo] }
+            ]
+          }
+        }
+      },
+      { $sort: { isNew: -1, createdAt: -1 } },
+      { $skip: skip },
+      { $limit: Number(limit) },
+      { $project: { isDeleted: 0 } }
+    ]);
+
+    products = await Product.populate(products, {
+      path: "category",
+      select: "name"
+    });
 
     const total = await Product.countDocuments(filter);
 
