@@ -162,8 +162,7 @@ const getLandingPageData = async (req, res) => {
         };
 
         if (bestSellersAgg.length === 0) {
-          // If no orders exist yet, send 5 random active products
-          featuredProducts = shuffleArray(activeProducts).slice(0, 5);
+          featuredProducts = shuffleArray(activeProducts).slice(0, 10);
         } else {
           const salesMap = {};
           bestSellersAgg.forEach(item => {
@@ -186,24 +185,24 @@ const getLandingPageData = async (req, res) => {
 
           // Sort sold products by sales count descending (sequence according to order count)
           soldProducts.sort((a, b) => b.totalSold - a.totalSold);
-          
+
           // Randomize unsold products to keep display organic and premium
           const shuffledUnsold = shuffleArray(unsoldProducts);
-          
-          // Place sold products first, followed by random unsold products to fill layout (limit to 5)
-          featuredProducts = [...soldProducts, ...shuffledUnsold].slice(0, 5);
+
+          // Place sold products first, followed by random unsold products to fill layout (limit to 10)
+          featuredProducts = [...soldProducts, ...shuffledUnsold].slice(0, 10);
         }
         featuredProducts = featuredProducts.map(p => ({ ...p, displayMode: "best_sellers", isBestseller: true }));
       } else {
         // Default standard Featured Products (10 featured products)
-        featuredProducts = await Product.find({ 
-          isFeatured: true, 
-          isActive: true, 
-          isDeleted: false 
+        featuredProducts = await Product.find({
+          isFeatured: true,
+          isActive: true,
+          isDeleted: false
         })
-        .populate("category", "name")
-        .limit(10)
-        .lean();
+          .populate("category", "name")
+          .limit(10)
+          .lean();
         featuredProducts = featuredProducts.map(p => ({ ...p, displayMode: "featured", isBestseller: false }));
       }
     }
@@ -223,10 +222,10 @@ const getLandingPageData = async (req, res) => {
           isActive: true,
           isDeleted: false
         })
-        .populate("category", "name")
-        .sort({ createdAt: -1 })
-        .limit(10)
-        .lean();
+          .populate("category", "name")
+          .sort({ createdAt: -1 })
+          .limit(10)
+          .lean();
 
         // Fallback: random 10 active products if no best deal products
         if (newArrivals.length === 0) {
@@ -260,10 +259,10 @@ const getLandingPageData = async (req, res) => {
           isActive: true,
           isDeleted: false
         })
-        .populate("category", "name")
-        .sort({ createdAt: -1 })
-        .limit(10)
-        .lean();
+          .populate("category", "name")
+          .sort({ createdAt: -1 })
+          .limit(10)
+          .lean();
 
         // Fallback: last added 10 products
         if (newArrivals.length === 0) {
@@ -271,10 +270,10 @@ const getLandingPageData = async (req, res) => {
             isActive: true,
             isDeleted: false
           })
-          .populate("category", "name")
-          .sort({ createdAt: -1 })
-          .limit(10)
-          .lean();
+            .populate("category", "name")
+            .sort({ createdAt: -1 })
+            .limit(10)
+            .lean();
         }
 
         // Map isNew dynamically + tag as new_arrivals
@@ -293,9 +292,9 @@ const getLandingPageData = async (req, res) => {
     // 7. Query active unique occasions
     let occasions = [];
     if (sectionStatus.occasion) {
-      occasions = await Product.distinct("occasion", { 
-        isActive: true, 
-        isDeleted: false 
+      occasions = await Product.distinct("occasion", {
+        isActive: true,
+        isDeleted: false
       });
       occasions = occasions.filter(occ => occ && occ.trim() !== "");
     }
