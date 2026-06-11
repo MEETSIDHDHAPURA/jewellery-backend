@@ -6,15 +6,15 @@ const bannerSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
-    description: {
-      type: String,
-      trim: true,
-    },
     topLine: {
       type: String,
       trim: true,
     },
     subtitle: {
+      type: String,
+      trim: true,
+    },
+    bgWord: {
       type: String,
       trim: true,
     },
