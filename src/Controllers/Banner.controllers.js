@@ -6,7 +6,7 @@ const { uploadOnCloudinary, updateOnCloudinary, deleteFromCloudinary } = require
 // Create Banner
 const createBanner = async (req, res) => {
   try {
-    const { title, isActive, category, description } = req.body;
+    const { title, isActive, category, description, topLine, subtitle } = req.body;
     let imageUrl = undefined;
 
     if (req.file) {
@@ -27,6 +27,8 @@ const createBanner = async (req, res) => {
       isActive: isActive !== undefined ? isActive : true,
       category: category || undefined,
       description,
+      topLine,
+      subtitle,
     });
 
     res.status(201).json(new ApiResponse(201, banner, "Banner created successfully"));
@@ -59,7 +61,7 @@ const getBannerById = async (req, res) => {
 // Update Banner
 const updateBanner = async (req, res) => {
   try {
-    const { title, order, isActive, category, description } = req.body;
+    const { title, order, isActive, category, description, topLine, subtitle } = req.body;
     const banner = await Banner.findById(req.params.id);
     if (!banner) throw new ApiError(404, "Banner not found");
 
@@ -74,6 +76,8 @@ const updateBanner = async (req, res) => {
     banner.order = order !== undefined ? Number(order) : banner.order;
     banner.isActive = isActive !== undefined ? isActive : banner.isActive;
     banner.description = description !== undefined ? description : banner.description;
+    banner.topLine = topLine !== undefined ? topLine : banner.topLine;
+    banner.subtitle = subtitle !== undefined ? subtitle : banner.subtitle;
     if (category !== undefined) {
       banner.category = category || null;
     }
