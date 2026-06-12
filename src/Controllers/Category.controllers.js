@@ -106,7 +106,7 @@ const updateCategory = async (req, res) => {
       category.name = trimmedName;
     }
     if (description) category.description = description;
-    
+
     if (image) {
       if (image.startsWith("data:")) {
         const uploadRes = await updateOnCloudinary(category.image, image);
@@ -117,7 +117,7 @@ const updateCategory = async (req, res) => {
         category.image = image;
       }
     }
-    
+
     if (typeof isActive !== "undefined") category.isActive = isActive;
 
     if (typeof subcategories !== "undefined") {

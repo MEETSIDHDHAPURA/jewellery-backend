@@ -150,7 +150,29 @@ const getLandingPageData = async (req, res) => {
 
     const getCategoryShowcase = async () => {
       if (!sectionStatus.category_showcase) return [];
-      return Category.find({ isActive: true }).limit(5);
+      const categories = await Category.find({ isActive: true });
+      const desiredOrder = [
+        "bracelet",
+        "ring",
+        "chain",
+        "pendant",
+        "hip-hop jewelry"
+      ];
+      categories.sort((a, b) => {
+        const nameA = a.name.toLowerCase().trim();
+        const nameB = b.name.toLowerCase().trim();
+        
+        const indexA = desiredOrder.findIndex(o => nameA === o || nameA.includes(o) || o.includes(nameA));
+        const indexB = desiredOrder.findIndex(o => nameB === o || nameB.includes(o) || o.includes(nameB));
+
+        if (indexA !== -1 && indexB !== -1) {
+          return indexA - indexB;
+        }
+        if (indexA !== -1) return -1;
+        if (indexB !== -1) return 1;
+        return a.name.localeCompare(b.name);
+      });
+      return categories.slice(0, 5);
     };
 
     const getFeaturedProducts = async () => {
