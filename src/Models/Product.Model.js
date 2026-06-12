@@ -195,4 +195,10 @@ productSchema.pre("save", async function () {
   }
 });
 
+productSchema.index({ isFeatured: 1, isActive: 1, isDeleted: 1 });
+productSchema.index({ isNew: 1, isActive: 1, isDeleted: 1, createdAt: -1 });
+productSchema.index({ isBestDeal: 1, isActive: 1, isDeleted: 1, createdAt: -1 });
+productSchema.index({ occasion: 1, isActive: 1, isDeleted: 1 });
+productSchema.index({ isActive: 1, isDeleted: 1, createdAt: -1 });
+
 module.exports = mongoose.model("Product", productSchema);

@@ -1,6 +1,7 @@
 const Banner = require("../Models/Banner.Model");
 const ApiResponse = require("../Utils/ApiResponse");
 const ApiError = require("../Utils/ApiError");
+const { clearLandingPageCache } = require("./LandingPage.controllers");
 const { uploadOnCloudinary, updateOnCloudinary, deleteFromCloudinary } = require("../Utils/Cloudinary");
 
 // Create Banner
@@ -31,6 +32,7 @@ const createBanner = async (req, res) => {
       bgWord,
     });
 
+    clearLandingPageCache();
     res.status(201).json(new ApiResponse(201, banner, "Banner created successfully"));
   } catch (error) {
     res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));
@@ -84,6 +86,7 @@ const updateBanner = async (req, res) => {
 
     await banner.save();
 
+    clearLandingPageCache();
     res.status(200).json(new ApiResponse(200, banner, "Banner updated successfully"));
   } catch (error) {
     res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));
@@ -102,6 +105,7 @@ const deleteBanner = async (req, res) => {
     }
 
     await Banner.findByIdAndDelete(req.params.id);
+    clearLandingPageCache();
     res.status(200).json(new ApiResponse(200, {}, "Banner deleted successfully"));
   } catch (error) {
     res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));
@@ -126,6 +130,7 @@ const reorderBanners = async (req, res) => {
     await Banner.bulkWrite(bulkOps);
 
     const banners = await Banner.find().populate("category").sort({ order: 1, createdAt: -1 });
+    clearLandingPageCache();
     res.status(200).json(new ApiResponse(200, banners, "Banners reordered successfully"));
   } catch (error) {
     res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));

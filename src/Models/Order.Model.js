@@ -68,4 +68,7 @@ const orderSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+orderSchema.index({ paymentStatus: 1 });
+orderSchema.index({ "items.product": 1, paymentStatus: 1 });
+
 module.exports = mongoose.model("Order", orderSchema);

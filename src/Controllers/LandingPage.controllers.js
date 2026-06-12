@@ -7,6 +7,17 @@ const Category = require("../Models/Category.Model");
 const Product = require("../Models/Product.Model");
 const Order = require("../Models/Order.Model");
 
+// Simple In-memory cache for landing page data
+let landingPageCache = null;
+let cacheExpiry = 0;
+const CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours
+
+// Function to clear cache when data is modified
+const clearLandingPageCache = () => {
+  landingPageCache = null;
+  cacheExpiry = 0;
+};
+
 
 // Get all sections with status (self-healing/seeding if empty)
 const getAllHomepageSections = async (req, res) => {
@@ -37,6 +48,7 @@ const toggleActiveHomepageSection = async (req, res) => {
 
     section.is_active = is_active !== undefined ? is_active : !section.is_active;
     await section.save();
+    clearLandingPageCache();
 
     res.status(200).json(new ApiResponse(200, section, `Homepage section '${section_key}' toggle successful`));
   } catch (error) {
@@ -69,6 +81,7 @@ const updateDisplayModeHomepageSection = async (req, res) => {
 
     section.display_mode = displayMode;
     await section.save();
+    clearLandingPageCache();
 
     res.status(200).json(new ApiResponse(200, section, `Homepage section '${section_key}' display mode updated to '${displayMode}' successfully`));
   } catch (error) {
@@ -94,6 +107,7 @@ const createHomepageSection = async (req, res) => {
       is_active: is_active !== undefined ? is_active : true,
       display_mode: display_mode || null,
     });
+    clearLandingPageCache();
 
     res.status(201).json(new ApiResponse(201, section, "Homepage section created successfully"));
   } catch (error) {
@@ -103,6 +117,11 @@ const createHomepageSection = async (req, res) => {
 
 const getLandingPageData = async (req, res) => {
   try {
+    const now = Date.now();
+    if (landingPageCache && now < cacheExpiry) {
+      return res.status(200).json(landingPageCache);
+    }
+
     // 1. Get all sections and seed if empty
     let sections = await HomepageSection.find().sort({ display_order: 1 });
     if (sections.length === 0) {
@@ -121,49 +140,45 @@ const getLandingPageData = async (req, res) => {
       sectionStatus[sec.section_key] = sec.is_active;
     });
 
-    // 3. Query banner data if hero section is active
-    let heroBanners = [];
-    if (sectionStatus.hero) {
-      heroBanners = await Banner.find({ isActive: true }).populate("category", "name _id").sort({ order: 1, createdAt: -1 });
-    }
+    // Promise-returning tasks for each section to run in parallel
+    const getHeroBanners = async () => {
+      if (!sectionStatus.hero) return [];
+      return Banner.find({ isActive: true })
+        .populate("category", "name _id")
+        .sort({ order: 1, createdAt: -1 });
+    };
 
-    // 4. Query category data if showcase is active
-    let categoryShowcase = [];
-    if (sectionStatus.category_showcase) {
-      categoryShowcase = await Category.find({ isActive: true }).limit(5);
-    }
+    const getCategoryShowcase = async () => {
+      if (!sectionStatus.category_showcase) return [];
+      return Category.find({ isActive: true }).limit(5);
+    };
 
-    // 5. Query featured products / best sellers
-    let featuredProducts = [];
-    if (sectionStatus.featured_products) {
+    const getFeaturedProducts = async () => {
+      if (!sectionStatus.featured_products) return [];
       const featuredSection = sections.find(s => s.section_key === "featured_products");
       const displayMode = featuredSection ? featuredSection.display_mode : "featured";
 
       if (displayMode === "best_sellers") {
-        // Query best sellers logic based on orders
+        // Aggregate top best selling products, limited to 50 to avoid loading too many
         const bestSellersAgg = await Order.aggregate([
           { $match: { paymentStatus: { $ne: "Failed" } } },
           { $unwind: "$items" },
           { $group: { _id: "$items.product", totalSold: { $sum: "$items.quantity" } } },
-          { $sort: { totalSold: -1 } }
+          { $sort: { totalSold: -1 } },
+          { $limit: 50 }
         ]);
 
-        const activeProducts = await Product.find({ isActive: true, isDeleted: false })
-          .populate("category", "name")
-          .lean();
+        let featured = [];
+        if (bestSellersAgg.length > 0) {
+          const bestSellerIds = bestSellersAgg.map(item => item._id);
+          const activeSoldProducts = await Product.find({
+            _id: { $in: bestSellerIds },
+            isActive: true,
+            isDeleted: false
+          })
+            .populate("category", "name")
+            .lean();
 
-        const shuffleArray = (array) => {
-          const arr = [...array];
-          for (let i = arr.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [arr[i], arr[j]] = [arr[j], arr[i]];
-          }
-          return arr;
-        };
-
-        if (bestSellersAgg.length === 0) {
-          featuredProducts = shuffleArray(activeProducts).slice(0, 10);
-        } else {
           const salesMap = {};
           bestSellersAgg.forEach(item => {
             if (item._id) {
@@ -171,31 +186,48 @@ const getLandingPageData = async (req, res) => {
             }
           });
 
-          const soldProducts = [];
-          const unsoldProducts = [];
+          const soldProducts = activeSoldProducts.map(p => ({
+            ...p,
+            totalSold: salesMap[p._id.toString()] || 0
+          }));
 
-          activeProducts.forEach(p => {
-            const sales = salesMap[p._id.toString()] || 0;
-            if (sales > 0) {
-              soldProducts.push({ ...p, totalSold: sales });
-            } else {
-              unsoldProducts.push(p);
-            }
-          });
-
-          // Sort sold products by sales count descending (sequence according to order count)
+          // Sort sold products by sales count descending
           soldProducts.sort((a, b) => b.totalSold - a.totalSold);
-
-          // Randomize unsold products to keep display organic and premium
-          const shuffledUnsold = shuffleArray(unsoldProducts);
-
-          // Place sold products first, followed by random unsold products to fill layout (limit to 10)
-          featuredProducts = [...soldProducts, ...shuffledUnsold].slice(0, 10);
+          featured = soldProducts.slice(0, 10);
         }
-        featuredProducts = featuredProducts.map(p => ({ ...p, displayMode: "best_sellers", isBestseller: true }));
+
+        // Fill remaining slots if we have fewer than 10 best sellers
+        if (featured.length < 10) {
+          const excludeIds = featured.map(p => p._id);
+          const needed = 10 - featured.length;
+          if (needed > 0) {
+            const randomProductsSample = await Product.aggregate([
+              {
+                $match: {
+                  _id: { $nin: excludeIds },
+                  isActive: true,
+                  isDeleted: false
+                }
+              },
+              { $sample: { size: needed } }
+            ]);
+
+            if (randomProductsSample.length > 0) {
+              const randomProducts = await Product.find({
+                _id: { $in: randomProductsSample.map(p => p._id) }
+              })
+                .populate("category", "name")
+                .lean();
+
+              featured = [...featured, ...randomProducts];
+            }
+          }
+        }
+
+        return featured.map(p => ({ ...p, displayMode: "best_sellers", isBestseller: true }));
       } else {
         // Default standard Featured Products (10 featured products)
-        featuredProducts = await Product.find({
+        const products = await Product.find({
           isFeatured: true,
           isActive: true,
           isDeleted: false
@@ -203,21 +235,19 @@ const getLandingPageData = async (req, res) => {
           .populate("category", "name")
           .limit(10)
           .lean();
-        featuredProducts = featuredProducts.map(p => ({ ...p, displayMode: "featured", isBestseller: false }));
+        return products.map(p => ({ ...p, displayMode: "featured", isBestseller: false }));
       }
-    }
+    };
 
-
-    // 6. Query new arrivals / best deals
-    let newArrivals = [];
-    if (sectionStatus.new_arrivals) {
+    const getNewArrivals = async () => {
+      if (!sectionStatus.new_arrivals) return [];
       const newArrivalsSection = sections.find(s => s.section_key === "new_arrivals");
       const displayMode = newArrivalsSection ? newArrivalsSection.display_mode : "new_arrivals";
       const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
 
       if (displayMode === "best_deal") {
         // Query products with isBestDeal: true
-        newArrivals = await Product.find({
+        let products = await Product.find({
           isBestDeal: true,
           isActive: true,
           isDeleted: false
@@ -227,20 +257,23 @@ const getLandingPageData = async (req, res) => {
           .limit(10)
           .lean();
 
-        // Fallback: random 10 active products if no best deal products
-        if (newArrivals.length === 0) {
-          const allActive = await Product.find({ isActive: true, isDeleted: false })
-            .populate("category", "name")
-            .lean();
-          for (let i = allActive.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [allActive[i], allActive[j]] = [allActive[j], allActive[i]];
+        // Fallback: random 10 active products using $sample if no best deal products
+        if (products.length === 0) {
+          const sampleProducts = await Product.aggregate([
+            { $match: { isActive: true, isDeleted: false } },
+            { $sample: { size: 10 } }
+          ]);
+          if (sampleProducts.length > 0) {
+            products = await Product.find({
+              _id: { $in: sampleProducts.map(p => p._id) }
+            })
+              .populate("category", "name")
+              .lean();
           }
-          newArrivals = allActive.slice(0, 10);
         }
 
         // Map isNew dynamically + tag as best_deal
-        newArrivals = newArrivals.map(p => {
+        return products.map(p => {
           const isWithin30 = p.createdAt ? (Date.now() - new Date(p.createdAt).getTime()) < 30 * 24 * 60 * 60 * 1000 : false;
           return {
             ...p,
@@ -251,7 +284,7 @@ const getLandingPageData = async (req, res) => {
         });
       } else {
         // New Arrivals mode: isNew true or created within 30 days
-        newArrivals = await Product.find({
+        let products = await Product.find({
           $or: [
             { isNew: true },
             { createdAt: { $gte: thirtyDaysAgo } }
@@ -265,8 +298,8 @@ const getLandingPageData = async (req, res) => {
           .lean();
 
         // Fallback: last added 10 products
-        if (newArrivals.length === 0) {
-          newArrivals = await Product.find({
+        if (products.length === 0) {
+          products = await Product.find({
             isActive: true,
             isDeleted: false
           })
@@ -277,7 +310,7 @@ const getLandingPageData = async (req, res) => {
         }
 
         // Map isNew dynamically + tag as new_arrivals
-        newArrivals = newArrivals.map(p => {
+        return products.map(p => {
           const isWithin30 = p.createdAt ? (Date.now() - new Date(p.createdAt).getTime()) < 30 * 24 * 60 * 60 * 1000 : false;
           return {
             ...p,
@@ -287,26 +320,39 @@ const getLandingPageData = async (req, res) => {
           };
         });
       }
-    }
+    };
 
-    // 7. Query active unique occasions
-    let occasions = [];
-    if (sectionStatus.occasion) {
-      occasions = await Product.distinct("occasion", {
+    const getOccasions = async () => {
+      if (!sectionStatus.occasion) return [];
+      const distinctOccasions = await Product.distinct("occasion", {
         isActive: true,
         isDeleted: false
       });
-      occasions = occasions.filter(occ => occ && occ.trim() !== "");
-    }
+      return distinctOccasions.filter(occ => occ && occ.trim() !== "");
+    };
 
-    res.status(200).json(new ApiResponse(200, {
+    // Execute queries in parallel
+    const [heroBanners, categoryShowcase, featuredProducts, newArrivals, occasions] = await Promise.all([
+      getHeroBanners(),
+      getCategoryShowcase(),
+      getFeaturedProducts(),
+      getNewArrivals(),
+      getOccasions()
+    ]);
+
+    const responsePayload = new ApiResponse(200, {
       sections: sectionStatus,
       hero: heroBanners,
       category_showcase: categoryShowcase,
       featured_products: featuredProducts,
       new_arrivals: newArrivals,
       occasion: occasions
-    }, "Landing page data fetched successfully"));
+    }, "Landing page data fetched successfully");
+
+    landingPageCache = responsePayload;
+    cacheExpiry = now + CACHE_TTL;
+
+    res.status(200).json(responsePayload);
 
   } catch (error) {
     res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));
@@ -319,4 +365,5 @@ module.exports = {
   toggleActiveHomepageSection,
   updateDisplayModeHomepageSection,
   getLandingPageData,
+  clearLandingPageCache,
 };

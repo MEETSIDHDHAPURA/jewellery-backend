@@ -12,6 +12,14 @@ const ApiError = require("../Utils/ApiError");
 const { uploadOnCloudinary, updateOnCloudinary } = require("../Utils/Cloudinary");
 const { generateVariantCombinations } = require("../Utils/Product.utils");
 const fs = require("fs");
+const { clearLandingPageCache } = require("./LandingPage.controllers");
+
+// Simple In-memory cache for pricing metadata
+let globalMetadataCache = null;
+let globalMetadataCacheExpiry = 0;
+const METADATA_CACHE_TTL = 15 * 1000; // 15 seconds
+
+const categoryModifiersCache = {};
 
 // Helper to safely parse JSON strings sent via multipart/form-data
 const safeParseJSON = (value, fallback = []) => {
@@ -273,6 +281,7 @@ const createProduct = async (req, res) => {
       await product.save();
     }
 
+    clearLandingPageCache();
     res.status(201).json(new ApiResponse(201, product, "Product and variants created successfully"));
   } catch (error) {
     res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));
@@ -406,12 +415,42 @@ const getProductById = async (req, res) => {
       diamondTypes: [...new Set(product.diamondOptions.map(d => d.diamondType))],
     };
 
-    // Fetch pricing metadata for client-side calculations
-    const [metalRates, makingCharges, marginConfig, pricingModifiers] = await Promise.all([
-      MetalRate.find({}),
-      MakingCharge.find({}),
-      GlobalConfig.findOne({ key: "margin_percentage" }),
-      PricingModifier.find({ category: product.category, isActive: true })
+    // Fetch pricing metadata with in-memory cache
+    const now = Date.now();
+    let globalMetaPromise;
+    if (globalMetadataCache && now < globalMetadataCacheExpiry) {
+      globalMetaPromise = Promise.resolve(globalMetadataCache);
+    } else {
+      globalMetaPromise = Promise.all([
+        MetalRate.find({}),
+        MakingCharge.find({}),
+        GlobalConfig.findOne({ key: "margin_percentage" })
+      ]).then(res => {
+        globalMetadataCache = res;
+        globalMetadataCacheExpiry = Date.now() + METADATA_CACHE_TTL;
+        return res;
+      });
+    }
+
+    const categoryStr = product.category && product.category._id ? product.category._id.toString() : (product.category ? product.category.toString() : "");
+    let modifiersPromise;
+    if (categoryStr && categoryModifiersCache[categoryStr] && now < categoryModifiersCache[categoryStr].expiry) {
+      modifiersPromise = Promise.resolve(categoryModifiersCache[categoryStr].data);
+    } else {
+      modifiersPromise = PricingModifier.find({ category: product.category, isActive: true }).then(res => {
+        if (categoryStr) {
+          categoryModifiersCache[categoryStr] = {
+            data: res,
+            expiry: Date.now() + METADATA_CACHE_TTL
+          };
+        }
+        return res;
+      });
+    }
+
+    const [[metalRates, makingCharges, marginConfig], pricingModifiers] = await Promise.all([
+      globalMetaPromise,
+      modifiersPromise
     ]);
 
     res.status(200).json(new ApiResponse(200, {
@@ -595,6 +634,7 @@ const updateProduct = async (req, res) => {
 
     if (!product) throw new ApiError(404, "Product not found");
 
+    clearLandingPageCache();
     res.status(200).json(new ApiResponse(200, product, "Product updated successfully"));
   } catch (error) {
     res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));
@@ -612,6 +652,7 @@ const deleteProduct = async (req, res) => {
     // Also deactivate variants
     await ProductVariant.updateMany({ productId: product._id }, { isActive: false });
 
+    clearLandingPageCache();
     res.status(200).json(new ApiResponse(200, {}, "Product deleted successfully"));
   } catch (error) {
     res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));
@@ -837,6 +878,7 @@ const bulkCreateProducts = async (req, res) => {
       createdProducts.push(product);
     }
 
+    clearLandingPageCache();
     res.status(201).json(new ApiResponse(201, createdProducts, `${createdProducts.length} products imported successfully`));
   } catch (error) {
     res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));

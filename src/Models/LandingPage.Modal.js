@@ -24,5 +24,7 @@ const LandingPageSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+LandingPageSchema.index({ display_order: 1 });
+
 module.exports = mongoose.model("LandingPage", LandingPageSchema);
 
