@@ -22,6 +22,7 @@ const homepageSectionRoutes = require("./Routes/LandingPage.Routes");
 const customDesignRoutes = require("./Routes/CustomDesign.Routes");
 const cartRoutes = require("./Routes/Cart.Routes");
 const wishlistRoutes = require("./Routes/Wishlist.Routes");
+const quotationRoutes = require("./Routes/Quotation.Routes");
 
 
 app.use(
@@ -59,6 +60,7 @@ app.use("/api/v1/admin", homepageSectionRoutes);
 app.use("/api/v1/custom-design", customDesignRoutes);
 app.use("/api/v1/cart", cartRoutes);
 app.use("/api/v1/wishlist", wishlistRoutes);
+app.use("/api/v1/quotation", quotationRoutes);
 
 
 module.exports = app;
