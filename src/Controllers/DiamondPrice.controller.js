@@ -2,6 +2,11 @@ const DiamondPrice = require("../Models/DiamondPrice.Model.js");
 const ApiResponse = require("../Utils/ApiResponse");
 const ApiError = require("../Utils/ApiError");
 const { uploadOnCloudinary, updateOnCloudinary, deleteFromCloudinary } = require("../Utils/Cloudinary");
+const mongoose = require("mongoose");
+const fs = require("fs");
+
+// Helper to escape regex special characters to prevent ReDoS
+const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 // Create Diamond Price
 const createDiamondPrice = async (req, res) => {
@@ -16,14 +21,25 @@ const createDiamondPrice = async (req, res) => {
     let certificateUrl = "";
 
     if (req.files) {
+      // Upload image and certificate in parallel
+      const uploadPromises = [];
       if (req.files.image) {
-        const uploadRes = await uploadOnCloudinary(req.files.image[0].path);
-        if (uploadRes) imageUrl = uploadRes.secure_url;
+        uploadPromises.push(
+          uploadOnCloudinary(req.files.image[0].path).then(uploadRes => {
+            fs.unlink(req.files.image[0].path, () => {});
+            if (uploadRes) imageUrl = uploadRes.secure_url;
+          })
+        );
       }
       if (req.files.certificate) {
-        const uploadRes = await uploadOnCloudinary(req.files.certificate[0].path);
-        if (uploadRes) certificateUrl = uploadRes.secure_url;
+        uploadPromises.push(
+          uploadOnCloudinary(req.files.certificate[0].path).then(uploadRes => {
+            fs.unlink(req.files.certificate[0].path, () => {});
+            if (uploadRes) certificateUrl = uploadRes.secure_url;
+          })
+        );
       }
+      if (uploadPromises.length > 0) await Promise.all(uploadPromises);
     }
 
     const diamond = await DiamondPrice.create({
@@ -57,33 +73,37 @@ const bulkCreateDiamondPrices = async (req, res) => {
       throw new ApiError(400, "diamonds array is required");
     }
 
-    const results = [];
-    for (const d of diamonds) {
-      const diamond = await DiamondPrice.findOneAndUpdate(
-        {
+    // Use bulkWrite for single DB round-trip instead of N sequential findOneAndUpdate calls
+    const bulkOps = diamonds.map(d => ({
+      updateOne: {
+        filter: {
           diamondType: d.diamondType || "Lab Grown",
           shape: d.shape,
           carat: d.carat,
           clarity: d.clarity,
           color: d.color,
         },
-        {
-          diamondType: d.diamondType || "Lab Grown",
-          shape: d.shape,
-          carat: d.carat,
-          clarity: d.clarity,
-          color: d.color,
-          price: d.price || 0,
-          stock: d.stock || 0,
-          isActive: d.isActive !== undefined ? d.isActive : true,
-          isSoldOut: d.isSoldOut !== undefined ? d.isSoldOut : false,
+        update: {
+          $set: {
+            diamondType: d.diamondType || "Lab Grown",
+            shape: d.shape,
+            carat: d.carat,
+            clarity: d.clarity,
+            color: d.color,
+            price: d.price || 0,
+            stock: d.stock || 0,
+            isActive: d.isActive !== undefined ? d.isActive : true,
+            isSoldOut: d.isSoldOut !== undefined ? d.isSoldOut : false,
+          }
         },
-        { upsert: true, returnDocument: "after" }
-      );
-      results.push(diamond);
-    }
+        upsert: true
+      }
+    }));
 
-    res.status(200).json(new ApiResponse(200, { count: results.length }, `${results.length} diamond prices saved successfully`));
+    const bulkResult = await DiamondPrice.bulkWrite(bulkOps, { ordered: false });
+    const totalProcessed = (bulkResult.modifiedCount || 0) + (bulkResult.upsertedCount || 0);
+
+    res.status(200).json(new ApiResponse(200, { count: totalProcessed }, `${totalProcessed} diamond prices saved successfully`));
   } catch (error) {
     res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));
   }
@@ -101,7 +121,9 @@ const getDiamondPrices = async (req, res) => {
 
     if (req.query.search && req.query.search.trim() !== "") {
       const searchVal = req.query.search.trim();
-      const searchRegex = new RegExp(searchVal, "i");
+      // Escape regex to prevent ReDoS attacks
+      const escapedSearch = escapeRegex(searchVal);
+      const searchRegex = new RegExp(escapedSearch, "i");
       const searchConditions = [
         { diamondType: searchRegex },
         { shape: searchRegex },
@@ -115,24 +137,34 @@ const getDiamondPrices = async (req, res) => {
       filter.$or = searchConditions;
     }
 
-    // Pagination parameters
-    const page = parseInt(req.query.page, 10) || 1;
-    const limit = parseInt(req.query.limit, 10) || 20;
+    // Validate & clamp pagination parameters
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 20));
     const skip = (page - 1) * limit;
 
-    const total = await DiamondPrice.countDocuments(filter);
+    // Run filtered query + count and stats queries in parallel (6 DB calls → 2 parallel batches)
+    const [filteredResults, statsResults] = await Promise.all([
+      // Batch 1: Filtered data + count
+      Promise.all([
+        DiamondPrice.find(filter)
+          .sort({ diamondType: 1, shape: 1, carat: 1, color: 1, clarity: 1 })
+          .skip(skip)
+          .limit(limit)
+          .lean(),
+        DiamondPrice.countDocuments(filter)
+      ]),
+      // Batch 2: Unfiltered stats (all run in parallel)
+      Promise.all([
+        DiamondPrice.estimatedDocumentCount(),
+        DiamondPrice.distinct("shape"),
+        DiamondPrice.distinct("color"),
+        DiamondPrice.distinct("clarity")
+      ])
+    ]);
+
+    const [diamonds, total] = filteredResults;
+    const [totalEntries, uniqueShapesArray, uniqueColorsArray, uniqueClaritiesArray] = statsResults;
     const pages = Math.ceil(total / limit);
-
-    const diamonds = await DiamondPrice.find(filter)
-      .sort({ diamondType: 1, shape: 1, carat: 1, color: 1, clarity: 1 })
-      .skip(skip)
-      .limit(limit);
-
-    // Core statistics (overall/unfiltered for statistics cards)
-    const totalEntries = await DiamondPrice.countDocuments();
-    const uniqueShapesArray = await DiamondPrice.distinct("shape");
-    const uniqueColorsArray = await DiamondPrice.distinct("color");
-    const uniqueClaritiesArray = await DiamondPrice.distinct("clarity");
 
     res.status(200).json(
       new ApiResponse(
@@ -163,7 +195,11 @@ const getDiamondPrices = async (req, res) => {
 // Get Diamond Price By ID
 const getDiamondPriceById = async (req, res) => {
   try {
-    const diamond = await DiamondPrice.findById(req.params.id);
+    // Validate ObjectId to avoid unnecessary DB call
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      throw new ApiError(400, "Invalid diamond price ID");
+    }
+    const diamond = await DiamondPrice.findById(req.params.id).lean();
     if (!diamond) {
       throw new ApiError(404, "Diamond price not found");
     }
@@ -176,7 +212,13 @@ const getDiamondPriceById = async (req, res) => {
 // Update Diamond Price By ID
 const updateDiamondPrice = async (req, res) => {
   try {
-    const existing = await DiamondPrice.findById(req.params.id);
+    // Validate ObjectId to avoid unnecessary DB call
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      throw new ApiError(400, "Invalid diamond price ID");
+    }
+
+    // Use lean() + select only needed fields for existence check
+    const existing = await DiamondPrice.findById(req.params.id).select("image certificate").lean();
     if (!existing) {
       throw new ApiError(404, "Diamond price not found");
     }
@@ -184,18 +226,25 @@ const updateDiamondPrice = async (req, res) => {
     const updateData = { ...req.body };
 
     if (req.files) {
+      // Upload image and certificate in parallel
+      const uploadPromises = [];
       if (req.files.image) {
-        const uploadRes = await updateOnCloudinary(existing.image, req.files.image[0].path);
-        if (uploadRes) {
-          updateData.image = uploadRes.secure_url;
-        }
+        uploadPromises.push(
+          updateOnCloudinary(existing.image, req.files.image[0].path).then(uploadRes => {
+            fs.unlink(req.files.image[0].path, () => {});
+            if (uploadRes) updateData.image = uploadRes.secure_url;
+          })
+        );
       }
       if (req.files.certificate) {
-        const uploadRes = await updateOnCloudinary(existing.certificate, req.files.certificate[0].path);
-        if (uploadRes) {
-          updateData.certificate = uploadRes.secure_url;
-        }
+        uploadPromises.push(
+          updateOnCloudinary(existing.certificate, req.files.certificate[0].path).then(uploadRes => {
+            fs.unlink(req.files.certificate[0].path, () => {});
+            if (uploadRes) updateData.certificate = uploadRes.secure_url;
+          })
+        );
       }
+      if (uploadPromises.length > 0) await Promise.all(uploadPromises);
     }
 
     const diamond = await DiamondPrice.findByIdAndUpdate(req.params.id, updateData, {
@@ -215,19 +264,23 @@ const updateDiamondPrice = async (req, res) => {
 // Delete Diamond Price By ID
 const deleteDiamondPrice = async (req, res) => {
   try {
-    const diamond = await DiamondPrice.findById(req.params.id);
+    // Validate ObjectId to avoid unnecessary DB call
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      throw new ApiError(400, "Invalid diamond price ID");
+    }
+
+    // Single DB call: findByIdAndDelete returns the deleted doc (eliminates extra findById)
+    const diamond = await DiamondPrice.findByIdAndDelete(req.params.id).lean();
     if (!diamond) {
       throw new ApiError(404, "Diamond price not found");
     }
 
-    if (diamond.image) {
-      await deleteFromCloudinary(diamond.image);
-    }
-    if (diamond.certificate) {
-      await deleteFromCloudinary(diamond.certificate);
-    }
+    // Delete Cloudinary assets in parallel
+    const deletePromises = [];
+    if (diamond.image) deletePromises.push(deleteFromCloudinary(diamond.image));
+    if (diamond.certificate) deletePromises.push(deleteFromCloudinary(diamond.certificate));
+    if (deletePromises.length > 0) await Promise.all(deletePromises);
 
-    await DiamondPrice.findByIdAndDelete(req.params.id);
     res.status(200).json(new ApiResponse(200, {}, "Diamond price deleted successfully"));
   } catch (error) {
     res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));

@@ -178,12 +178,27 @@ const productSchema = new mongoose.Schema(
 
 productSchema.pre("save", async function () {
   if (!this.sku) {
+    // Generate SKU: category first 2 letters + subCategory first 2 letters + 5 random digits
+    let catPrefix = "XX";
+    if (this.category) {
+      try {
+        const cat = await mongoose.models.Category.findById(this.category).select("name").lean();
+        if (cat && cat.name) {
+          catPrefix = cat.name.replace(/[^a-zA-Z]/g, "").substring(0, 2).toUpperCase();
+        }
+      } catch {
+        // fallback to XX
+      }
+    }
+    const subCatPrefix = this.subCategory
+      ? this.subCategory.replace(/[^a-zA-Z]/g, "").substring(0, 2).toUpperCase()
+      : "XX";
+
     let unique = false;
     let attempts = 0;
     while (!unique && attempts < 10) {
       const randomNum = Math.floor(10000 + Math.random() * 90000); // 5-digit random number
-      const randomLetters = Math.random().toString(36).substring(2, 5).toUpperCase(); // 3-letter code
-      const generatedSku = `SKU-${randomNum}${randomLetters}`;
+      const generatedSku = `${catPrefix}-${subCatPrefix}-${randomNum}`;
 
       const existingProduct = await mongoose.models.Product.findOne({ sku: generatedSku });
       if (!existingProduct) {

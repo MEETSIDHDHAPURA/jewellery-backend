@@ -23,6 +23,7 @@ const customDesignRoutes = require("./Routes/CustomDesign.Routes");
 const cartRoutes = require("./Routes/Cart.Routes");
 const wishlistRoutes = require("./Routes/Wishlist.Routes");
 const quotationRoutes = require("./Routes/Quotation.Routes");
+const herotextRoutes = require("./Routes/Herotext.Routes");
 
 
 app.use(
@@ -61,6 +62,7 @@ app.use("/api/v1/custom-design", customDesignRoutes);
 app.use("/api/v1/cart", cartRoutes);
 app.use("/api/v1/wishlist", wishlistRoutes);
 app.use("/api/v1/quotation", quotationRoutes);
+app.use("/api/v1/herotext", herotextRoutes);
 
 
 module.exports = app;

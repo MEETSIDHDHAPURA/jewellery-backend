@@ -53,28 +53,92 @@ const parseBoolean = (val, defaultVal = false) => {
   return !!val;
 };
 
+// Helper to escape regex special characters
+const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+// Helper to generate SKU: first 2 letters of category + first 2 letters of subCategory + 5 random digits
+const generateSKU = async (categoryId, subCategory) => {
+  let catPrefix = "XX";
+  if (categoryId) {
+    const cat = await Category.findById(categoryId).select("name").lean();
+    if (cat && cat.name) {
+      catPrefix = cat.name.replace(/[^a-zA-Z]/g, "").substring(0, 2).toUpperCase();
+    }
+  }
+  const subCatPrefix = subCategory
+    ? subCategory.replace(/[^a-zA-Z]/g, "").substring(0, 2).toUpperCase()
+    : "XX";
+  
+  let unique = false;
+  let attempts = 0;
+  let sku = "";
+  while (!unique && attempts < 10) {
+    const randomNum = Math.floor(10000 + Math.random() * 90000); // 5-digit random number
+    sku = `${catPrefix}-${subCatPrefix}-${randomNum}`;
+    const exists = await Product.exists({ sku });
+    if (!exists) {
+      unique = true;
+    }
+    attempts++;
+  }
+  return sku;
+};
+
+// Helper to upload multiple files in parallel
+const uploadFilesParallel = async (files, uploadFn) => {
+  const results = await Promise.all(
+    files.map(async (file) => {
+      try {
+        const uploadRes = await uploadFn(file.path);
+        // Clean up temp file after upload
+        fs.unlink(file.path, () => {});
+        return uploadRes ? uploadRes.secure_url : null;
+      } catch {
+        fs.unlink(file.path, () => {});
+        return null;
+      }
+    })
+  );
+  return results.filter(Boolean);
+};
+
 const populatePricingAndDiamonds = async (productData, body, productId = null) => {
   // 1. Populate makingCharge, basePrice, and silverBasePrice from MakingCharge collection
   try {
-    const goldCharge = await MakingCharge.findOne({ metal: "Yellow Gold" });
-    const silverCharge = await MakingCharge.findOne({ metal: "Silver" });
-
-    if (goldCharge) productData.basePrice = goldCharge.value || 0;
-    if (silverCharge) productData.silverBasePrice = silverCharge.value || 0;
-
     const allowedMetals = typeof productData.allowedMetals === "string" ? safeParseJSON(productData.allowedMetals, []) : (productData.allowedMetals || []);
     const selectedMetalVal = allowedMetals && allowedMetals[0] ? allowedMetals[0] : "";
-    if (selectedMetalVal) {
-      const isSilver = selectedMetalVal.toLowerCase().includes("silver");
-      const isPlatinum = selectedMetalVal.toLowerCase().includes("platinum");
-      let searchMetal = "Yellow Gold";
-      if (isSilver) searchMetal = "Silver";
-      else if (isPlatinum) searchMetal = "Platinum";
-      else if (selectedMetalVal.toLowerCase().includes("white")) searchMetal = "White Gold";
-      else if (selectedMetalVal.toLowerCase().includes("rose")) searchMetal = "Rose Gold";
-      else searchMetal = "Yellow Gold";
 
-      const primaryCharge = await MakingCharge.findOne({ metal: searchMetal });
+    // Determine which metals we need to query
+    const metalsToQuery = ["Yellow Gold", "Silver"];
+    if (selectedMetalVal) {
+      const lowerMetal = selectedMetalVal.toLowerCase();
+      let searchMetal = "Yellow Gold";
+      if (lowerMetal.includes("silver")) searchMetal = "Silver";
+      else if (lowerMetal.includes("platinum")) searchMetal = "Platinum";
+      else if (lowerMetal.includes("white")) searchMetal = "White Gold";
+      else if (lowerMetal.includes("rose")) searchMetal = "Rose Gold";
+      if (!metalsToQuery.includes(searchMetal)) metalsToQuery.push(searchMetal);
+    }
+
+    // Single query to fetch all needed making charges at once
+    const allCharges = await MakingCharge.find({ metal: { $in: metalsToQuery } }).lean();
+    const chargeMap = {};
+    for (const charge of allCharges) {
+      chargeMap[charge.metal] = charge;
+    }
+
+    if (chargeMap["Yellow Gold"]) productData.basePrice = chargeMap["Yellow Gold"].value || 0;
+    if (chargeMap["Silver"]) productData.silverBasePrice = chargeMap["Silver"].value || 0;
+
+    if (selectedMetalVal) {
+      const lowerMetal = selectedMetalVal.toLowerCase();
+      let searchMetal = "Yellow Gold";
+      if (lowerMetal.includes("silver")) searchMetal = "Silver";
+      else if (lowerMetal.includes("platinum")) searchMetal = "Platinum";
+      else if (lowerMetal.includes("white")) searchMetal = "White Gold";
+      else if (lowerMetal.includes("rose")) searchMetal = "Rose Gold";
+
+      const primaryCharge = chargeMap[searchMetal];
       if (primaryCharge) {
         productData.makingCharge = primaryCharge.value || 0;
         productData.makingChargeType = "per_gram";
@@ -93,7 +157,7 @@ const populatePricingAndDiamonds = async (productData, body, productId = null) =
     let allowedColors = typeof body.allowedColors === "string" ? safeParseJSON(body.allowedColors, []) : (body.allowedColors || []);
 
     if (productId && (!diamondType || !diamondShape || allowedCarats.length === 0)) {
-      const existing = await Product.findById(productId);
+      const existing = await Product.findById(productId).select("diamondOptions title allowedCarats allowedClarities allowedColors").lean();
       if (existing) {
         if (!diamondType) diamondType = existing.diamondOptions && existing.diamondOptions[0] ? existing.diamondOptions[0].diamondType : "";
         if (!diamondShape) {
@@ -109,13 +173,14 @@ const populatePricingAndDiamonds = async (productData, body, productId = null) =
     if (diamondType && diamondShape && allowedCarats.length > 0) {
       const caratNumbers = allowedCarats.map(c => Number(c) || parseFloat(c));
 
+      // Escape regex inputs to prevent ReDoS
       const matchingDiamonds = await DiamondPrice.find({
-        diamondType: { $regex: new RegExp(`^${diamondType}$`, "i") },
-        shape: { $regex: new RegExp(`^${diamondShape}$`, "i") },
+        diamondType: { $regex: new RegExp(`^${escapeRegex(diamondType)}$`, "i") },
+        shape: { $regex: new RegExp(`^${escapeRegex(diamondShape)}$`, "i") },
         carat: { $in: caratNumbers },
         clarity: { $in: allowedClarities },
         color: { $in: allowedColors }
-      });
+      }).lean();
 
       if (matchingDiamonds && matchingDiamonds.length > 0) {
         productData.diamondOptions = matchingDiamonds.map(d => ({
@@ -160,48 +225,42 @@ const createProduct = async (req, res) => {
     };
 
     if (req.files) {
-      if (req.files.images_yellowGold) {
-        for (const file of req.files.images_yellowGold) {
-          const uploadRes = await uploadOnCloudinary(file.path);
-          if (uploadRes) metalImages.yellowGold.push(uploadRes.secure_url);
-        }
-      }
-      if (req.files.images_whiteGold) {
-        for (const file of req.files.images_whiteGold) {
-          const uploadRes = await uploadOnCloudinary(file.path);
-          if (uploadRes) metalImages.whiteGold.push(uploadRes.secure_url);
-        }
-      }
-      if (req.files.images_roseGold) {
-        for (const file of req.files.images_roseGold) {
-          const uploadRes = await uploadOnCloudinary(file.path);
-          if (uploadRes) metalImages.roseGold.push(uploadRes.secure_url);
-        }
-      }
-      if (req.files.images_silver) {
-        for (const file of req.files.images_silver) {
-          const uploadRes = await uploadOnCloudinary(file.path);
-          if (uploadRes) metalImages.silver.push(uploadRes.secure_url);
-        }
-      }
-      if (req.files.images_platinum) {
-        for (const file of req.files.images_platinum) {
-          const uploadRes = await uploadOnCloudinary(file.path);
-          if (uploadRes) metalImages.platinum.push(uploadRes.secure_url);
-        }
-      }
+      // Upload all metal images in parallel for faster processing
+      const metalUploadMap = {
+        images_yellowGold: "yellowGold",
+        images_whiteGold: "whiteGold",
+        images_roseGold: "roseGold",
+        images_silver: "silver",
+        images_platinum: "platinum"
+      };
+
+      const metalUploadPromises = Object.entries(metalUploadMap)
+        .filter(([fileKey]) => req.files[fileKey])
+        .map(async ([fileKey, metalKey]) => {
+          const urls = await uploadFilesParallel(req.files[fileKey], uploadOnCloudinary);
+          metalImages[metalKey] = urls;
+        });
+
+      // Upload sizeChart and certificate in parallel with metal images
+      const miscUploads = [];
       if (req.files.sizeChart) {
-        const uploadRes = await uploadOnCloudinary(req.files.sizeChart[0].path);
-        if (uploadRes) {
-          sizeChart = uploadRes.secure_url;
-        }
+        miscUploads.push(
+          uploadOnCloudinary(req.files.sizeChart[0].path).then(uploadRes => {
+            fs.unlink(req.files.sizeChart[0].path, () => {});
+            if (uploadRes) sizeChart = uploadRes.secure_url;
+          })
+        );
       }
       if (req.files.certificate) {
-        const uploadRes = await uploadOnCloudinary(req.files.certificate[0].path);
-        if (uploadRes) {
-          certificateFile = uploadRes.secure_url;
-        }
+        miscUploads.push(
+          uploadOnCloudinary(req.files.certificate[0].path).then(uploadRes => {
+            fs.unlink(req.files.certificate[0].path, () => {});
+            if (uploadRes) certificateFile = uploadRes.secure_url;
+          })
+        );
       }
+
+      await Promise.all([...metalUploadPromises, ...miscUploads]);
     }
 
     // Auto-generate unique slug if not provided
@@ -267,6 +326,9 @@ const createProduct = async (req, res) => {
 
     await populatePricingAndDiamonds(productData, req.body);
 
+    // Generate SKU: category first 2 letters + subCategory first 2 letters + 5 random digits
+    productData.sku = await generateSKU(category, subCategory);
+
     const product = await Product.create(productData);
 
     // 2. Generate and Create Variants if config is provided
@@ -298,6 +360,10 @@ const getAllProducts = async (req, res) => {
       isFeatured, search, page = 1, limit = 10, isActive
     } = req.query;
 
+    // Validate & clamp pagination inputs
+    const safePage = Math.max(1, Math.floor(Number(page)) || 1);
+    const safeLimit = Math.min(100, Math.max(1, Math.floor(Number(limit)) || 10));
+
     const filter = { isDeleted: false };
     if (isActive === 'all') {
       // do not filter by isActive
@@ -309,30 +375,32 @@ const getAllProducts = async (req, res) => {
       filter.isActive = true;
     }
 
+    // Category filter: single DB call with $or for plural/singular match
     if (category) {
       if (mongoose.Types.ObjectId.isValid(category)) {
-        filter.category = category;
+        filter.category = new mongoose.Types.ObjectId(category);
       } else {
-        let foundCategory = await Category.findOne({
-          name: { $regex: new RegExp(`^${category}$`, "i") }
-        });
-        if (!foundCategory && category.toLowerCase().endsWith('s')) {
-          const singular = category.slice(0, -1);
-          foundCategory = await Category.findOne({
-            name: { $regex: new RegExp(`^${singular}$`, "i") }
-          });
+        // Escape regex special characters to prevent ReDoS
+        const escaped = category.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const regexPatterns = [{ name: { $regex: new RegExp(`^${escaped}$`, "i") } }];
+        if (category.toLowerCase().endsWith('s')) {
+          const singularEscaped = escaped.slice(0, -1);
+          regexPatterns.push({ name: { $regex: new RegExp(`^${singularEscaped}$`, "i") } });
         }
-        if (foundCategory) {
-          filter.category = foundCategory._id;
-        } else {
-          filter.category = new mongoose.Types.ObjectId();
-        }
+        const foundCategory = await Category.findOne({ $or: regexPatterns }).lean();
+        filter.category = foundCategory ? foundCategory._id : new mongoose.Types.ObjectId();
       }
     }
+
     if (gender) filter.gender = gender;
     if (isFeatured) filter.isFeatured = isFeatured === 'true';
     if (occasion) filter.occasion = { $in: Array.isArray(occasion) ? occasion : [occasion] };
-    if (search) filter.title = { $regex: search, $options: "i" };
+
+    // Sanitize search input to prevent ReDoS
+    if (search) {
+      const escapedSearch = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      filter.title = { $regex: escapedSearch, $options: "i" };
+    }
 
     // Price Filter (on base listing price)
     if (minPrice || maxPrice) {
@@ -341,14 +409,11 @@ const getAllProducts = async (req, res) => {
       if (maxPrice) filter.Price.$lte = Number(maxPrice);
     }
 
-    const skip = (page - 1) * limit;
+    const skip = (safePage - 1) * safeLimit;
     const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
 
-    if (filter.category && typeof filter.category === 'string' && mongoose.Types.ObjectId.isValid(filter.category)) {
-      filter.category = new mongoose.Types.ObjectId(filter.category);
-    }
-
-    let products = await Product.aggregate([
+    // Single aggregation with $facet: get products + total count in one DB round-trip
+    const result = await Product.aggregate([
       { $match: filter },
       {
         $addFields: {
@@ -361,21 +426,38 @@ const getAllProducts = async (req, res) => {
         }
       },
       { $sort: { isNew: -1, createdAt: -1 } },
-      { $skip: skip },
-      { $limit: Number(limit) },
-      { $project: { isDeleted: 0 } }
+      {
+        $facet: {
+          products: [
+            { $skip: skip },
+            { $limit: safeLimit },
+            { $project: { isDeleted: 0 } },
+            {
+              $lookup: {
+                from: "categories",
+                localField: "category",
+                foreignField: "_id",
+                as: "category",
+                pipeline: [{ $project: { name: 1 } }]
+              }
+            },
+            {
+              $addFields: {
+                category: { $arrayElemAt: ["$category", 0] }
+              }
+            }
+          ],
+          totalCount: [{ $count: "count" }]
+        }
+      }
     ]);
 
-    products = await Product.populate(products, {
-      path: "category",
-      select: "name"
-    });
-
-    const total = await Product.countDocuments(filter);
+    const products = result[0]?.products || [];
+    const total = result[0]?.totalCount[0]?.count || 0;
 
     res.status(200).json(new ApiResponse(200, {
       products,
-      pagination: { total, page: Number(page), limit: Number(limit), pages: Math.ceil(total / limit) }
+      pagination: { total, page: safePage, limit: safeLimit, pages: Math.ceil(total / safeLimit) }
     }, "Products fetched successfully"));
   } catch (error) {
     res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));
@@ -387,7 +469,13 @@ const getAllProducts = async (req, res) => {
  */
 const getProductById = async (req, res) => {
   try {
-    const product = await Product.findById(req.params.id)
+    // Validate ObjectId to avoid unnecessary DB call
+    const productId = req.params.id;
+    if (!mongoose.Types.ObjectId.isValid(productId)) {
+      throw new ApiError(400, "Invalid product ID");
+    }
+
+    const product = await Product.findById(productId)
       .select("-isDeleted")
       .populate("category")
       .populate({
@@ -408,11 +496,24 @@ const getProductById = async (req, res) => {
 
     // Extract available filters from variants for the frontend
     const variants = product.variants || [];
+    const diamondOptions = product.diamondOptions || [];
+    const metalSet = new Set();
+    const puritySet = new Set();
+    const sizeSet = new Set();
+    const diamondTypeSet = new Set();
+    for (const v of variants) {
+      if (v.metal) metalSet.add(v.metal);
+      if (v.purity) puritySet.add(v.purity);
+      if (v.sizeValue) sizeSet.add(v.sizeValue);
+    }
+    for (const d of diamondOptions) {
+      if (d.diamondType) diamondTypeSet.add(d.diamondType);
+    }
     const filters = {
-      metals: [...new Set(variants.map(v => v.metal))],
-      purities: [...new Set(variants.map(v => v.purity))],
-      sizes: [...new Set(variants.filter(v => v.sizeValue).map(v => v.sizeValue))],
-      diamondTypes: [...new Set(product.diamondOptions.map(d => d.diamondType))],
+      metals: [...metalSet],
+      purities: [...puritySet],
+      sizes: [...sizeSet],
+      diamondTypes: [...diamondTypeSet],
     };
 
     // Fetch pricing metadata with in-memory cache
@@ -422,13 +523,13 @@ const getProductById = async (req, res) => {
       globalMetaPromise = Promise.resolve(globalMetadataCache);
     } else {
       globalMetaPromise = Promise.all([
-        MetalRate.find({}),
-        MakingCharge.find({}),
-        GlobalConfig.findOne({ key: "margin_percentage" })
-      ]).then(res => {
-        globalMetadataCache = res;
+        MetalRate.find({}).lean(),
+        MakingCharge.find({}).lean(),
+        GlobalConfig.findOne({ key: "margin_percentage" }).lean()
+      ]).then(cacheResult => {
+        globalMetadataCache = cacheResult;
         globalMetadataCacheExpiry = Date.now() + METADATA_CACHE_TTL;
-        return res;
+        return cacheResult;
       });
     }
 
@@ -437,14 +538,14 @@ const getProductById = async (req, res) => {
     if (categoryStr && categoryModifiersCache[categoryStr] && now < categoryModifiersCache[categoryStr].expiry) {
       modifiersPromise = Promise.resolve(categoryModifiersCache[categoryStr].data);
     } else {
-      modifiersPromise = PricingModifier.find({ category: product.category, isActive: true }).then(res => {
+      modifiersPromise = PricingModifier.find({ category: product.category, isActive: true }).lean().then(modResult => {
         if (categoryStr) {
           categoryModifiersCache[categoryStr] = {
-            data: res,
+            data: modResult,
             expiry: Date.now() + METADATA_CACHE_TTL
           };
         }
-        return res;
+        return modResult;
       });
     }
 
@@ -480,57 +581,38 @@ const updateProduct = async (req, res) => {
     const rawBody = { ...req.body };
     const updateData = {};
 
-    // 1. Array and Object fields parsing
-    const jsonFields = [
-      "diamondOptions",
-      "occasion",
-      "variants",
-      "allowedMetals",
-      "allowedCarats",
-      "allowedClarities",
-      "allowedColors",
-      "allowedSizes",
-      "keywords"
-    ];
+    // 1. Array and Object fields parsing (Set for O(1) lookup)
+    const jsonFields = new Set([
+      "diamondOptions", "occasion", "variants",
+      "allowedMetals", "allowedCarats", "allowedClarities",
+      "allowedColors", "allowedSizes", "keywords"
+    ]);
 
     // 2. Number fields parsing
-    const numberFields = [
-      "Price",
-      "makingCharge",
-      "basePrice",
-      "silverBasePrice",
-      "weight",
-      "weight10K",
-      "weight14K",
-      "weight18K",
-      "weight22K",
-      "weightSilver",
-      "weightPlatinum"
-    ];
+    const numberFields = new Set([
+      "Price", "makingCharge", "basePrice", "silverBasePrice",
+      "weight", "weight10K", "weight14K", "weight18K",
+      "weight22K", "weightSilver", "weightPlatinum"
+    ]);
 
     // 3. Boolean fields parsing
-    const booleanFields = [
-      "isFeatured",
-      "isActive",
-      "isDeleted",
-      "isSoldOut",
-      "isNew",
-      "isBestDeal"
-    ];
+    const booleanFields = new Set([
+      "isFeatured", "isActive", "isDeleted",
+      "isSoldOut", "isNew", "isBestDeal"
+    ]);
 
     // Process all keys in req.body
-    Object.keys(rawBody).forEach(key => {
-      if (jsonFields.includes(key)) {
-        const fallback = [];
-        updateData[key] = safeParseJSON(rawBody[key], fallback);
-      } else if (numberFields.includes(key)) {
+    for (const key of Object.keys(rawBody)) {
+      if (jsonFields.has(key)) {
+        updateData[key] = safeParseJSON(rawBody[key], []);
+      } else if (numberFields.has(key)) {
         updateData[key] = parseNumber(rawBody[key], 0);
-      } else if (booleanFields.includes(key)) {
+      } else if (booleanFields.has(key)) {
         updateData[key] = parseBoolean(rawBody[key], false);
       } else {
         updateData[key] = rawBody[key];
       }
-    });
+    }
 
     // Handle slug formatting if updated
     if (updateData.slug) {
@@ -575,48 +657,42 @@ const updateProduct = async (req, res) => {
     }
 
     if (req.files) {
-      if (req.files.images_yellowGold) {
-        for (const file of req.files.images_yellowGold) {
-          const uploadRes = await uploadOnCloudinary(file.path);
-          if (uploadRes) finalMetalImages.yellowGold.push(uploadRes.secure_url);
-        }
-      }
-      if (req.files.images_whiteGold) {
-        for (const file of req.files.images_whiteGold) {
-          const uploadRes = await uploadOnCloudinary(file.path);
-          if (uploadRes) finalMetalImages.whiteGold.push(uploadRes.secure_url);
-        }
-      }
-      if (req.files.images_roseGold) {
-        for (const file of req.files.images_roseGold) {
-          const uploadRes = await uploadOnCloudinary(file.path);
-          if (uploadRes) finalMetalImages.roseGold.push(uploadRes.secure_url);
-        }
-      }
-      if (req.files.images_silver) {
-        for (const file of req.files.images_silver) {
-          const uploadRes = await uploadOnCloudinary(file.path);
-          if (uploadRes) finalMetalImages.silver.push(uploadRes.secure_url);
-        }
-      }
-      if (req.files.images_platinum) {
-        for (const file of req.files.images_platinum) {
-          const uploadRes = await uploadOnCloudinary(file.path);
-          if (uploadRes) finalMetalImages.platinum.push(uploadRes.secure_url);
-        }
-      }
+      // Upload all metal images in parallel for faster processing
+      const metalUploadMap = {
+        images_yellowGold: "yellowGold",
+        images_whiteGold: "whiteGold",
+        images_roseGold: "roseGold",
+        images_silver: "silver",
+        images_platinum: "platinum"
+      };
+
+      const metalUploadPromises = Object.entries(metalUploadMap)
+        .filter(([fileKey]) => req.files[fileKey])
+        .map(async ([fileKey, metalKey]) => {
+          const urls = await uploadFilesParallel(req.files[fileKey], uploadOnCloudinary);
+          finalMetalImages[metalKey].push(...urls);
+        });
+
+      // Upload sizeChart and certificate in parallel with metal images
+      const miscUploads = [];
       if (req.files.sizeChart) {
-        const uploadRes = await updateOnCloudinary(existing.sizeChart, req.files.sizeChart[0].path);
-        if (uploadRes) {
-          updateData.sizeChart = uploadRes.secure_url;
-        }
+        miscUploads.push(
+          updateOnCloudinary(existing.sizeChart, req.files.sizeChart[0].path).then(uploadRes => {
+            fs.unlink(req.files.sizeChart[0].path, () => {});
+            if (uploadRes) updateData.sizeChart = uploadRes.secure_url;
+          })
+        );
       }
       if (req.files.certificate) {
-        const uploadRes = await updateOnCloudinary(existing.certificate, req.files.certificate[0].path);
-        if (uploadRes) {
-          updateData.certificate = uploadRes.secure_url;
-        }
+        miscUploads.push(
+          updateOnCloudinary(existing.certificate, req.files.certificate[0].path).then(uploadRes => {
+            fs.unlink(req.files.certificate[0].path, () => {});
+            if (uploadRes) updateData.certificate = uploadRes.secure_url;
+          })
+        );
       }
+
+      await Promise.all([...metalUploadPromises, ...miscUploads]);
     }
 
     updateData.metalImages = finalMetalImages;
@@ -628,6 +704,15 @@ const updateProduct = async (req, res) => {
     }
 
     await populatePricingAndDiamonds(updateData, req.body, id);
+
+    // Regenerate SKU if category or subCategory changed, or if product has no SKU
+    const categoryChanged = updateData.category && String(updateData.category) !== String(existing.category);
+    const subCategoryChanged = updateData.subCategory !== undefined && updateData.subCategory !== existing.subCategory;
+    if (categoryChanged || subCategoryChanged || !existing.sku) {
+      const skuCategoryId = updateData.category || existing.category;
+      const skuSubCategory = updateData.subCategory !== undefined ? updateData.subCategory : existing.subCategory;
+      updateData.sku = await generateSKU(skuCategoryId, skuSubCategory);
+    }
 
     const product = await Product.findByIdAndUpdate(id, updateData, { returnDocument: "after" })
       .populate("variants");
@@ -646,11 +731,18 @@ const updateProduct = async (req, res) => {
  */
 const deleteProduct = async (req, res) => {
   try {
-    const product = await Product.findByIdAndUpdate(req.params.id, { isDeleted: true }, { returnDocument: "after" });
-    if (!product) throw new ApiError(404, "Product not found");
+    // Validate ObjectId to avoid unnecessary DB call
+    const productId = req.params.id;
+    if (!mongoose.Types.ObjectId.isValid(productId)) {
+      throw new ApiError(400, "Invalid product ID");
+    }
 
-    // Also deactivate variants
-    await ProductVariant.updateMany({ productId: product._id }, { isActive: false });
+    // Soft-delete product and deactivate variants in parallel
+    const [product] = await Promise.all([
+      Product.findByIdAndUpdate(productId, { isDeleted: true }, { returnDocument: "after" }),
+      ProductVariant.updateMany({ productId: new mongoose.Types.ObjectId(productId) }, { isActive: false })
+    ]);
+    if (!product) throw new ApiError(404, "Product not found");
 
     clearLandingPageCache();
     res.status(200).json(new ApiResponse(200, {}, "Product deleted successfully"));
@@ -729,20 +821,15 @@ const bulkCreateProducts = async (req, res) => {
         if (categoryCache[cacheKey]) {
           categoryId = categoryCache[cacheKey];
         } else {
+          // Single query: try ObjectId match OR name match together
+          const escapedCat = escapeRegex(category.trim());
+          const orConditions = [{ name: { $regex: new RegExp(`^${escapedCat}$`, "i") } }];
           if (mongoose.Types.ObjectId.isValid(category)) {
-            const cat = await Category.findById(category);
-            if (cat) {
-              categoryId = cat._id;
-            }
+            orConditions.unshift({ _id: new mongoose.Types.ObjectId(category) });
           }
-
-          if (!categoryId) {
-            const cat = await Category.findOne({
-              name: { $regex: new RegExp(`^${category.trim()}$`, "i") }
-            });
-            if (cat) {
-              categoryId = cat._id;
-            }
+          const cat = await Category.findOne({ $or: orConditions }).lean();
+          if (cat) {
+            categoryId = cat._id;
           }
 
           if (!categoryId) {
@@ -783,14 +870,14 @@ const bulkCreateProducts = async (req, res) => {
         metalImages_yellowGold, metalImages_whiteGold, metalImages_roseGold, metalImages_silver, metalImages_platinum
       } = pData;
 
-      // Generate unique slug
+      // Generate unique slug (use select + lean for faster check)
       let finalSlug = title
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, "-")
         .replace(/(^-|-$)+/g, "");
 
-      const existingProduct = await Product.findOne({ slug: finalSlug });
-      if (existingProduct) {
+      const slugExists = await Product.exists({ slug: finalSlug });
+      if (slugExists) {
         finalSlug = `${finalSlug}-${Math.random().toString(36).substring(2, 7)}`;
       }
 
