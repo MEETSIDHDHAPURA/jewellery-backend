@@ -972,6 +972,75 @@ const bulkCreateProducts = async (req, res) => {
   }
 };
 
+/**
+ * Get Related Products based on Category, SubCategory, Occasion, and Gender
+ */
+const getRelatedProducts = async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      throw new ApiError(400, "Invalid product ID");
+    }
+
+    const product = await Product.findById(id).lean();
+    if (!product || product.isDeleted || !product.isActive) {
+      throw new ApiError(404, "Product not found");
+    }
+
+    const limit = parseInt(req.query.limit) || 10;
+
+    // Fetch products in the same category
+    let related = await Product.find({
+      _id: { $ne: product._id },
+      category: product.category,
+      isActive: true,
+      isDeleted: false
+    })
+    .limit(limit * 2)
+    .populate("category", "name")
+    .lean();
+
+    // If not enough in the same category, get from other categories
+    if (related.length < limit) {
+      const extra = await Product.find({
+        _id: { $ne: product._id },
+        category: { $ne: product.category },
+        isActive: true,
+        isDeleted: false
+      })
+      .limit(limit - related.length)
+      .populate("category", "name")
+      .lean();
+      related = [...related, ...extra];
+    }
+
+    // Score based on similarity
+    const scored = related.map(p => {
+      let score = 0;
+      if (p.subCategory && product.subCategory && p.subCategory.toLowerCase() === product.subCategory.toLowerCase()) {
+        score += 5;
+      }
+      if (p.occasion && product.occasion) {
+        const matches = p.occasion.filter(o => product.occasion.includes(o)).length;
+        score += matches * 2;
+      }
+      if (p.gender === product.gender) {
+        score += 1;
+      }
+      return { p, score };
+    });
+
+    // Sort descending by score
+    scored.sort((a, b) => b.score - a.score);
+
+    const finalProducts = scored.slice(0, limit).map(item => item.p);
+
+    res.status(200).json(new ApiResponse(200, finalProducts, "Related products fetched successfully"));
+  } catch (error) {
+    res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));
+  }
+};
+
 module.exports = {
   createProduct,
   getAllProducts,
@@ -979,4 +1048,6 @@ module.exports = {
   updateProduct,
   deleteProduct,
   bulkCreateProducts,
+  getRelatedProducts,
 };
+
