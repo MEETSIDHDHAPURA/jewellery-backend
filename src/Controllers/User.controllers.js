@@ -16,29 +16,51 @@ const registerUser = async (req, res) => {
       throw new ApiError(400, "Name, Email and Password are required");
     }
 
-    const existingUser = await User.findOne({ email });
+    let existingUser = await User.findOne({ email });
     if (existingUser) {
-      throw new ApiError(409, "User with this email already exists");
+      if (existingUser.isVerified !== false) {
+        throw new ApiError(409, "User with this email already exists");
+      }
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const otpExpire = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
 
-    const user = await User.create({
-      name,
-      email,
-      password: hashedPassword,
-      phone,
-    });
+    let user;
+    if (existingUser) {
+      existingUser.name = name;
+      existingUser.password = hashedPassword;
+      existingUser.phone = phone;
+      existingUser.otp = otp;
+      existingUser.otpExpire = otpExpire;
+      user = await existingUser.save();
+    } else {
+      user = await User.create({
+        name,
+        email,
+        password: hashedPassword,
+        phone,
+        otp,
+        otpExpire,
+        isVerified: false,
+      });
+    }
 
-    const createdUser = await User.findById(user._id).select("-password");
+    const message = `
+      <div style="font-family: sans-serif; max-width: 500px; margin: auto; padding: 20px; border: 1px solid #eee; border-radius: 10px;">
+        <h2 style="color: #333; text-align: center;">Verify Your Email</h2>
+        <p>Thank you for registering. Please use the following One-Time Password (OTP) to complete your registration:</p>
+        <div style="background-color: #f9f9f9; padding: 15px; text-align: center; font-size: 24px; font-weight: bold; letter-spacing: 5px; margin: 20px 0; border-radius: 5px; border: 1px solid #ddd; color: #111;">
+          ${otp}
+        </div>
+        <p style="color: #666; font-size: 14px;">This OTP is valid for 10 minutes. If you did not request this, please ignore this email.</p>
+      </div>
+    `;
 
-    const token = jwt.sign(
-      { id: createdUser._id, email: createdUser.email },
-      process.env.JWT_SECRET || "user_secret_key",
-      { expiresIn: "7d" }
-    );
+    await sendMail(email, "Verify Your Email - OTP", message);
 
-    res.status(201).json(new ApiResponse(201, { user: createdUser, token }, "User registered successfully"));
+    res.status(200).json(new ApiResponse(200, { email, requiresOTP: true }, "OTP sent to email successfully"));
   } catch (error) {
     res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));
   }
@@ -56,6 +78,10 @@ const loginUser = async (req, res) => {
     const user = await User.findOne({ email, isDeleted: false });
     if (!user) {
       throw new ApiError(404, "User not found");
+    }
+
+    if (user.isVerified === false) {
+      throw new ApiError(403, "Please verify your email first");
     }
 
     const isPasswordValid = await bcrypt.compare(password, user.password);
@@ -226,6 +252,91 @@ const getAllUsers = async (req, res) => {
   }
 };
 
+// Verify OTP
+const verifyOTP = async (req, res) => {
+  try {
+    const { email, otp } = req.body;
+
+    if (!email || !otp) {
+      throw new ApiError(400, "Email and OTP are required");
+    }
+
+    const user = await User.findOne({ email });
+    if (!user) {
+      throw new ApiError(404, "User not found");
+    }
+
+    if (user.isVerified) {
+      throw new ApiError(400, "User is already verified");
+    }
+
+    if (!user.otp || user.otp !== otp || user.otpExpire < Date.now()) {
+      throw new ApiError(400, "Invalid or expired OTP");
+    }
+
+    user.isVerified = true;
+    user.otp = null;
+    user.otpExpire = null;
+    await user.save();
+
+    const createdUser = await User.findById(user._id).select("-password -otp -otpExpire");
+
+    const token = jwt.sign(
+      { id: createdUser._id, email: createdUser.email },
+      process.env.JWT_SECRET || "user_secret_key",
+      { expiresIn: "7d" }
+    );
+
+    res.status(200).json(new ApiResponse(200, { user: createdUser, token }, "OTP verified successfully. User registered."));
+  } catch (error) {
+    res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));
+  }
+};
+
+// Resend OTP
+const resendOTP = async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      throw new ApiError(400, "Email is required");
+    }
+
+    const user = await User.findOne({ email });
+    if (!user) {
+      throw new ApiError(404, "User not found");
+    }
+
+    if (user.isVerified) {
+      throw new ApiError(400, "User is already verified");
+    }
+
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const otpExpire = new Date(Date.now() + 10 * 60 * 1000);
+
+    user.otp = otp;
+    user.otpExpire = otpExpire;
+    await user.save();
+
+    const message = `
+      <div style="font-family: sans-serif; max-width: 500px; margin: auto; padding: 20px; border: 1px solid #eee; border-radius: 10px;">
+        <h2 style="color: #333; text-align: center;">Verify Your Email</h2>
+        <p>Use the following new One-Time Password (OTP) to complete your registration:</p>
+        <div style="background-color: #f9f9f9; padding: 15px; text-align: center; font-size: 24px; font-weight: bold; letter-spacing: 5px; margin: 20px 0; border-radius: 5px; border: 1px solid #ddd; color: #111;">
+          ${otp}
+        </div>
+        <p style="color: #666; font-size: 14px;">This OTP is valid for 10 minutes. If you did not request this, please ignore this email.</p>
+      </div>
+    `;
+
+    await sendMail(email, "Verify Your Email - New OTP", message);
+
+    res.status(200).json(new ApiResponse(200, {}, "OTP resent successfully"));
+  } catch (error) {
+    res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));
+  }
+};
+
 module.exports = {
   registerUser,
   loginUser,
@@ -235,4 +346,6 @@ module.exports = {
   updateUserProfile,
   updatePassword,
   getAllUsers,
+  verifyOTP,
+  resendOTP,
 };

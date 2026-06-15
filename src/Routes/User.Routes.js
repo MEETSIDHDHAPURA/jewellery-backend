@@ -4,6 +4,8 @@ const userController = require("../Controllers/User.controllers");
 const upload = require("../Middlewares/multer.middleware");
 
 router.post("/register", userController.registerUser);
+router.post("/verify-otp", userController.verifyOTP);
+router.post("/resend-otp", userController.resendOTP);
 router.post("/login", userController.loginUser);
 router.post("/forgot-password", userController.forgotPassword);
 router.post("/reset-password/:token", userController.resetPassword);
