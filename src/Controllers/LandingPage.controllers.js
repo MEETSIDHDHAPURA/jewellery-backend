@@ -6,6 +6,7 @@ const Banner = require("../Models/Banner.Model");
 const Category = require("../Models/Category.Model");
 const Product = require("../Models/Product.Model");
 const Order = require("../Models/Order.Model");
+const HeroText = require("../Models/Herotext.Modal");
 
 // Simple In-memory cache for landing page data
 let landingPageCache = null;
@@ -353,18 +354,25 @@ const getLandingPageData = async (req, res) => {
       return distinctOccasions.filter(occ => occ && occ.trim() !== "");
     };
 
+    const getHeroTexts = async () => {
+      const docs = await HeroText.find();
+      return docs.map(d => d.herotext);
+    };
+
     // Execute queries in parallel
-    const [heroBanners, categoryShowcase, featuredProducts, newArrivals, occasions] = await Promise.all([
+    const [heroBanners, categoryShowcase, featuredProducts, newArrivals, occasions, herotexts] = await Promise.all([
       getHeroBanners(),
       getCategoryShowcase(),
       getFeaturedProducts(),
       getNewArrivals(),
-      getOccasions()
+      getOccasions(),
+      getHeroTexts()
     ]);
 
     const responsePayload = new ApiResponse(200, {
       sections: sectionStatus,
       hero: heroBanners,
+      herotext: herotexts,
       category_showcase: categoryShowcase,
       featured_products: featuredProducts,
       new_arrivals: newArrivals,
