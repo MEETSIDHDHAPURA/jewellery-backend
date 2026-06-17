@@ -11,7 +11,30 @@ const createOrder = async (req, res) => {
       throw new ApiError(400, "Order items are required");
     }
 
+    // Generate unique orderId
+    const generateUniqueOrderId = async () => {
+      const date = new Date();
+      const DD = String(date.getDate()).padStart(2, "0");
+      const MM = String(date.getMonth() + 1).padStart(2, "0");
+      const YY = String(date.getFullYear()).slice(-2);
+      
+      let isUnique = false;
+      let newOrderId = "";
+      while (!isUnique) {
+        const random = Math.floor(10000 + Math.random() * 90000);
+        newOrderId = `Order-${DD}${MM}${YY}${random}`;
+        const existingOrder = await Order.findOne({ orderId: newOrderId });
+        if (!existingOrder) {
+          isUnique = true;
+        }
+      }
+      return newOrderId;
+    };
+
+    const orderId = await generateUniqueOrderId();
+
     const order = await Order.create({
+      orderId,
       user: req.user ? req.user._id : req.body.userId, // Support both logged in and guest with ID
       items,
       subTotal,
@@ -33,6 +56,7 @@ const getAllOrders = async (req, res) => {
     const orders = await Order.find()
       .populate("user")
       .populate("items.product")
+      .populate("items.diamond")
       .sort({ createdAt: -1 });
     res.status(200).json(new ApiResponse(200, orders, "Orders fetched successfully"));
   } catch (error) {
@@ -46,6 +70,7 @@ const getUserOrders = async (req, res) => {
     const userId = req.params.userId;
     const orders = await Order.find({ user: userId })
       .populate("items.product")
+      .populate("items.diamond")
       .sort({ createdAt: -1 });
     res.status(200).json(new ApiResponse(200, orders, "User orders fetched successfully"));
   } catch (error) {

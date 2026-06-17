@@ -80,7 +80,7 @@ const loginUser = async (req, res) => {
       throw new ApiError(404, "User not found");
     }
 
-    if (user.isVerified === false) {
+    if (user.isVerified === false && user.role !== "admin" && user.role !== "SuperAdmin") {
       throw new ApiError(403, "Please verify your email first");
     }
 

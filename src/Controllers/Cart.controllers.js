@@ -94,7 +94,7 @@ const recalculateCartDiscount = async (cart) => {
 const getCart = async (req, res) => {
   try {
     const userId = getUserId(req);
-    let cart = await Cart.findOne({ user: userId }).populate("items.product").populate("items.diamond");
+    let cart = await Cart.findOne({ user: userId }).populate({ path: "items.product", populate: { path: "category" } }).populate("items.diamond");
     
     if (!cart) {
       cart = await Cart.create({ user: userId, items: [] });
@@ -103,7 +103,7 @@ const getCart = async (req, res) => {
       await recalculateCartDiscount(cart);
       await cart.save();
       // Refetch with populated details
-      cart = await Cart.findById(cart._id).populate("items.product").populate("items.diamond");
+      cart = await Cart.findById(cart._id).populate({ path: "items.product", populate: { path: "category" } }).populate("items.diamond");
     }
     
     res.status(200).json(new ApiResponse(200, cart, "Cart fetched successfully"));
@@ -187,7 +187,7 @@ const addToCart = async (req, res) => {
     await cart.save();
     
     // Return the populated cart
-    const populatedCart = await Cart.findById(cart._id).populate("items.product").populate("items.diamond");
+    const populatedCart = await Cart.findById(cart._id).populate({ path: "items.product", populate: { path: "category" } }).populate("items.diamond");
     res.status(200).json(new ApiResponse(200, populatedCart, "Item added to cart successfully"));
   } catch (error) {
     res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));
@@ -225,7 +225,7 @@ const updateCartItem = async (req, res) => {
     await recalculateCartDiscount(cart);
     await cart.save();
 
-    const populatedCart = await Cart.findById(cart._id).populate("items.product").populate("items.diamond");
+    const populatedCart = await Cart.findById(cart._id).populate({ path: "items.product", populate: { path: "category" } }).populate("items.diamond");
     res.status(200).json(new ApiResponse(200, populatedCart, "Cart item updated successfully"));
   } catch (error) {
     res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));
@@ -256,7 +256,7 @@ const removeFromCart = async (req, res) => {
     await recalculateCartDiscount(cart);
     await cart.save();
 
-    const populatedCart = await Cart.findById(cart._id).populate("items.product").populate("items.diamond");
+    const populatedCart = await Cart.findById(cart._id).populate({ path: "items.product", populate: { path: "category" } }).populate("items.diamond");
     res.status(200).json(new ApiResponse(200, populatedCart, "Item removed from cart successfully"));
   } catch (error) {
     res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));
@@ -326,7 +326,7 @@ const applyCoupon = async (req, res) => {
     await recalculateCartDiscount(cart);
     await cart.save();
 
-    const populatedCart = await Cart.findById(cart._id).populate("items.product").populate("items.diamond");
+    const populatedCart = await Cart.findById(cart._id).populate({ path: "items.product", populate: { path: "category" } }).populate("items.diamond");
     res.status(200).json(new ApiResponse(200, populatedCart, "Coupon applied successfully"));
   } catch (error) {
     res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));
@@ -350,7 +350,7 @@ const removeCoupon = async (req, res) => {
 
     await cart.save();
 
-    const populatedCart = await Cart.findById(cart._id).populate("items.product").populate("items.diamond");
+    const populatedCart = await Cart.findById(cart._id).populate({ path: "items.product", populate: { path: "category" } }).populate("items.diamond");
     res.status(200).json(new ApiResponse(200, populatedCart, "Coupon removed successfully"));
   } catch (error) {
     res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));

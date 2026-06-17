@@ -1,4 +1,5 @@
 const TaxProvince = require("../Models/TaxProvince.Model");
+const Category = require("../Models/Category.Model");
 const ApiResponse = require("../Utils/ApiResponse");
 const ApiError = require("../Utils/ApiError");
 
@@ -35,8 +36,44 @@ const createTaxProvince = async (req, res) => {
 // Get All Tax Provinces
 const getAllTaxProvinces = async (req, res) => {
   try {
-    const provinces = await TaxProvince.find({}).sort({ country: 1, name: 1 });
-    res.status(200).json(new ApiResponse(200, provinces, "Provinces fetched successfully"));
+    const categories = await Category.find({});
+    const provinces = await TaxProvince.find({});
+
+    const categoryNames = categories.map(c => c.name);
+
+    for (const prov of provinces) {
+      if (prov.country !== "USA") {
+        let changed = false;
+        const globalRate = prov.categories[0]?.rate ?? 0;
+
+        // Clean up categories that don't exist anymore in the DB
+        const originalCount = prov.categories.length;
+        prov.categories = prov.categories.filter(c =>
+          categoryNames.some(catName => catName.toLowerCase() === c.name.toLowerCase())
+        );
+        if (prov.categories.length !== originalCount) {
+          changed = true;
+        }
+
+        // Add missing categories
+        for (const catName of categoryNames) {
+          const exists = prov.categories.some(
+            c => c.name.toLowerCase() === catName.toLowerCase()
+          );
+          if (!exists) {
+            prov.categories.push({ name: catName, rate: globalRate });
+            changed = true;
+          }
+        }
+
+        if (changed) {
+          await prov.save();
+        }
+      }
+    }
+
+    const updatedProvinces = await TaxProvince.find({}).sort({ country: 1, name: 1 });
+    res.status(200).json(new ApiResponse(200, updatedProvinces, "Provinces fetched successfully"));
   } catch (error) {
     res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));
   }
