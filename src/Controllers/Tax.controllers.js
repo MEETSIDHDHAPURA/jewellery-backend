@@ -2,6 +2,7 @@ const TaxProvince = require("../Models/TaxProvince.Model");
 const Category = require("../Models/Category.Model");
 const ApiResponse = require("../Utils/ApiResponse");
 const ApiError = require("../Utils/ApiError");
+const logActivity = require("../Utils/logActivity");
 
 // Create Tax Province
 const createTaxProvince = async (req, res) => {
@@ -26,6 +27,8 @@ const createTaxProvince = async (req, res) => {
       country: targetCountry,
       categories: categories || [],
     });
+
+    await logActivity(req, "Create", `create tax province ${province.name} (${province.country})`);
 
     res.status(201).json(new ApiResponse(201, province, "Province created successfully"));
   } catch (error) {
@@ -90,6 +93,8 @@ const updateTaxProvince = async (req, res) => {
       throw new ApiError(404, "Province not found");
     }
 
+    const originalName = province.name;
+    const originalCountry = province.country;
     const targetName = name || province.name;
     const targetCountry = country || province.country;
 
@@ -112,6 +117,16 @@ const updateTaxProvince = async (req, res) => {
 
     await province.save();
 
+    const nameChanged = targetName !== originalName;
+    const countryChanged = targetCountry !== originalCountry;
+    let desc = `Update tax province ${province.name} (${province.country})`;
+    if (nameChanged || countryChanged) {
+      desc = `Update tax province name/country from ${originalName} (${originalCountry}) to ${province.name} (${province.country})`;
+    } else if (categories) {
+      desc = `Update tax rates for province ${province.name} (${province.country})`;
+    }
+    await logActivity(req, "Update", desc);
+
     res.status(200).json(new ApiResponse(200, province, "Province updated successfully"));
   } catch (error) {
     res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));
@@ -127,6 +142,8 @@ const deleteTaxProvince = async (req, res) => {
     if (!province) {
       throw new ApiError(404, "Province not found");
     }
+
+    await logActivity(req, "Delete", `Delete this tax province ${province.name} (${province.country})`);
 
     res.status(200).json(new ApiResponse(200, {}, "Province deleted successfully"));
   } catch (error) {

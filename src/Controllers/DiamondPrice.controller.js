@@ -4,6 +4,7 @@ const ApiError = require("../Utils/ApiError");
 const { uploadOnCloudinary, updateOnCloudinary, deleteFromCloudinary } = require("../Utils/Cloudinary");
 const mongoose = require("mongoose");
 const fs = require("fs");
+const logActivity = require("../Utils/logActivity");
 
 // Helper to escape regex special characters to prevent ReDoS
 const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -55,6 +56,8 @@ const createDiamondPrice = async (req, res) => {
       certificate: certificateUrl,
     });
 
+    await logActivity(req, "Create", `create diamond price: ${diamond.diamondType} ${diamond.shape} ${diamond.carat} Carat ${diamond.clarity} ${diamond.color} - Price: ₹${diamond.price}`);
+
     res.status(201).json(new ApiResponse(201, diamond, "Diamond price created successfully"));
   } catch (error) {
     if (error.code === 11000) {
@@ -102,6 +105,8 @@ const bulkCreateDiamondPrices = async (req, res) => {
 
     const bulkResult = await DiamondPrice.bulkWrite(bulkOps, { ordered: false });
     const totalProcessed = (bulkResult.modifiedCount || 0) + (bulkResult.upsertedCount || 0);
+
+    await logActivity(req, "Create", `bulk create ${totalProcessed} diamond prices`);
 
     res.status(200).json(new ApiResponse(200, { count: totalProcessed }, `${totalProcessed} diamond prices saved successfully`));
   } catch (error) {
@@ -217,8 +222,8 @@ const updateDiamondPrice = async (req, res) => {
       throw new ApiError(400, "Invalid diamond price ID");
     }
 
-    // Use lean() + select only needed fields for existence check
-    const existing = await DiamondPrice.findById(req.params.id).select("image certificate").lean();
+    // Use lean() to get existing details
+    const existing = await DiamondPrice.findById(req.params.id).lean();
     if (!existing) {
       throw new ApiError(404, "Diamond price not found");
     }
@@ -252,6 +257,15 @@ const updateDiamondPrice = async (req, res) => {
       runValidators: true,
     });
 
+    const oldPrice = existing.price;
+    const name = `${existing.diamondType || "Lab Grown"} ${existing.shape} ${existing.carat} Carat ${existing.clarity} ${existing.color}`;
+    const priceChanged = updateData.price !== undefined && Number(updateData.price) !== Number(oldPrice);
+    
+    const actionDesc = priceChanged
+      ? `Update diamond price for ${name} from ₹${oldPrice} to ₹${diamond.price}`
+      : `Update diamond price details for ${name}`;
+    await logActivity(req, "Update", actionDesc);
+
     res.status(200).json(new ApiResponse(200, diamond, "Diamond price updated successfully"));
   } catch (error) {
     if (error.code === 11000) {
@@ -280,6 +294,8 @@ const deleteDiamondPrice = async (req, res) => {
     if (diamond.image) deletePromises.push(deleteFromCloudinary(diamond.image));
     if (diamond.certificate) deletePromises.push(deleteFromCloudinary(diamond.certificate));
     if (deletePromises.length > 0) await Promise.all(deletePromises);
+
+    await logActivity(req, "Delete", `Delete diamond price of: ${diamond.diamondType || "Lab Grown"} ${diamond.shape} ${diamond.carat} Carat ${diamond.clarity} ${diamond.color}`);
 
     res.status(200).json(new ApiResponse(200, {}, "Diamond price deleted successfully"));
   } catch (error) {

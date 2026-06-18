@@ -3,6 +3,7 @@ const ApiResponse = require("../Utils/ApiResponse");
 const ApiError = require("../Utils/ApiError");
 const { clearLandingPageCache } = require("./LandingPage.controllers");
 const { uploadOnCloudinary, updateOnCloudinary, deleteFromCloudinary } = require("../Utils/Cloudinary");
+const logActivity = require("../Utils/logActivity");
 
 // Create Banner
 const createBanner = async (req, res) => {
@@ -31,6 +32,8 @@ const createBanner = async (req, res) => {
       subtitle,
       bgWord,
     });
+
+    await logActivity(req, "Create", `create banner: ${banner.title || "Untitled Banner"}`);
 
     clearLandingPageCache();
     res.status(201).json(new ApiResponse(201, banner, "Banner created successfully"));
@@ -67,6 +70,8 @@ const updateBanner = async (req, res) => {
     const banner = await Banner.findById(req.params.id);
     if (!banner) throw new ApiError(404, "Banner not found");
 
+    const originalTitle = banner.title;
+
     if (req.file) {
       const uploadRes = await updateOnCloudinary(banner.image, req.file.path);
       if (uploadRes) {
@@ -85,6 +90,12 @@ const updateBanner = async (req, res) => {
     }
 
     await banner.save();
+
+    const titleChanged = title !== undefined && title !== originalTitle;
+    const actionDesc = titleChanged
+      ? `Update banner name "${originalTitle}" to "${banner.title}"`
+      : `Update banner: "${banner.title || "Untitled"}"`;
+    await logActivity(req, "Update", actionDesc);
 
     clearLandingPageCache();
     res.status(200).json(new ApiResponse(200, banner, "Banner updated successfully"));
@@ -105,6 +116,9 @@ const deleteBanner = async (req, res) => {
     }
 
     await Banner.findByIdAndDelete(req.params.id);
+
+    await logActivity(req, "Delete", `Delete this banner: ${banner.title || "Untitled Banner"}`);
+
     clearLandingPageCache();
     res.status(200).json(new ApiResponse(200, {}, "Banner deleted successfully"));
   } catch (error) {
@@ -128,6 +142,8 @@ const reorderBanners = async (req, res) => {
     }));
 
     await Banner.bulkWrite(bulkOps);
+
+    await logActivity(req, "Update", "Reorder banners");
 
     const banners = await Banner.find().populate("category").sort({ order: 1, createdAt: -1 });
     clearLandingPageCache();

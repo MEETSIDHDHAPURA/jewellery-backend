@@ -1,6 +1,7 @@
 const HeroText = require("../Models/Herotext.Modal");
 const ApiResponse = require("../Utils/ApiResponse");
 const ApiError = require("../Utils/ApiError");
+const logActivity = require("../Utils/logActivity");
 
 // Create HeroText
 const createHeroText = async (req, res) => {
@@ -12,6 +13,7 @@ const createHeroText = async (req, res) => {
     }
 
     const newHeroText = await HeroText.create({ herotext });
+    await logActivity(req, "Create", `create hero text: ${newHeroText.herotext}`);
     res.status(201).json(new ApiResponse(201, newHeroText, "HeroText created successfully"));
   } catch (error) {
     res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));
@@ -54,15 +56,19 @@ const updateHeroText = async (req, res) => {
       throw new ApiError(400, "herotext must be a non-empty string");
     }
 
+    const existing = await HeroText.findById(id);
+    if (!existing) {
+      throw new ApiError(404, "HeroText not found");
+    }
+    const oldText = existing.herotext;
+
     const heroText = await HeroText.findByIdAndUpdate(
       id,
       { herotext },
       { new: true, runValidators: true }
     );
 
-    if (!heroText) {
-      throw new ApiError(404, "HeroText not found");
-    }
+    await logActivity(req, "Update", `Update hero text from "${oldText}" to "${heroText.herotext}"`);
 
     res.status(200).json(new ApiResponse(200, heroText, "HeroText updated successfully"));
   } catch (error) {
@@ -79,6 +85,8 @@ const deleteHeroText = async (req, res) => {
     if (!heroText) {
       throw new ApiError(404, "HeroText not found");
     }
+
+    await logActivity(req, "Delete", `Delete this hero text: ${heroText.herotext}`);
 
     res.status(200).json(new ApiResponse(200, {}, "HeroText deleted successfully"));
   } catch (error) {

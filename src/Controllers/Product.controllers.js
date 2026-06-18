@@ -13,6 +13,7 @@ const { uploadOnCloudinary, updateOnCloudinary } = require("../Utils/Cloudinary"
 const { generateVariantCombinations } = require("../Utils/Product.utils");
 const fs = require("fs");
 const { clearLandingPageCache } = require("./LandingPage.controllers");
+const logActivity = require("../Utils/logActivity");
 
 // Simple In-memory cache for pricing metadata
 let globalMetadataCache = null;
@@ -344,6 +345,7 @@ const createProduct = async (req, res) => {
     }
 
     clearLandingPageCache();
+    await logActivity(req, "Create", `create product ${product.title}`);
     res.status(201).json(new ApiResponse(201, product, "Product and variants created successfully"));
   } catch (error) {
     res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));
@@ -578,6 +580,9 @@ const updateProduct = async (req, res) => {
     const existing = await Product.findById(id);
     if (!existing) throw new ApiError(404, "Product not found");
 
+    const originalTitle = existing.title;
+    const originalPrice = existing.Price;
+
     const rawBody = { ...req.body };
     const updateData = {};
 
@@ -719,6 +724,20 @@ const updateProduct = async (req, res) => {
 
     if (!product) throw new ApiError(404, "Product not found");
 
+    let actionDescription = `update product ${product.title}`;
+    const titleChanged = updateData.title && updateData.title !== originalTitle;
+    const priceChanged = updateData.Price !== undefined && Number(updateData.Price) !== Number(originalPrice);
+    
+    if (titleChanged && priceChanged) {
+      actionDescription = `update product name "${originalTitle}" to "${product.title}" and price from ${originalPrice} to ${product.Price}`;
+    } else if (titleChanged) {
+      actionDescription = `update product name "${originalTitle}" to "${product.title}"`;
+    } else if (priceChanged) {
+      actionDescription = `update product price of "${product.title}" from ${originalPrice} to ${product.Price}`;
+    }
+
+    await logActivity(req, "Update", actionDescription);
+
     clearLandingPageCache();
     res.status(200).json(new ApiResponse(200, product, "Product updated successfully"));
   } catch (error) {
@@ -743,6 +762,8 @@ const deleteProduct = async (req, res) => {
       ProductVariant.updateMany({ productId: new mongoose.Types.ObjectId(productId) }, { isActive: false })
     ]);
     if (!product) throw new ApiError(404, "Product not found");
+
+    await logActivity(req, "Delete", `Delete this product ${product.title}`);
 
     clearLandingPageCache();
     res.status(200).json(new ApiResponse(200, {}, "Product deleted successfully"));
@@ -964,6 +985,8 @@ const bulkCreateProducts = async (req, res) => {
 
       createdProducts.push(product);
     }
+
+    await logActivity(req, "Create", `bulk create ${createdProducts.length} products`);
 
     clearLandingPageCache();
     res.status(201).json(new ApiResponse(201, createdProducts, `${createdProducts.length} products imported successfully`));

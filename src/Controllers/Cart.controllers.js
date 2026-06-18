@@ -1,5 +1,6 @@
 const Cart = require("../Models/Cart.Model");
 const Coupon = require("../Models/Coupon.Model");
+const CouponUsage = require("../Models/CouponUsage.Model");
 const ApiResponse = require("../Utils/ApiResponse");
 const ApiError = require("../Utils/ApiError");
 
@@ -24,33 +25,45 @@ const getUserId = (req) => {
   return userId;
 };
 
-// Helper to recalculate coupon discounts on the cart
+// Helper to recalculate coupon discounts on the cart (enhanced with all rules)
 const recalculateCartDiscount = async (cart) => {
   if (!cart.couponCode) {
     cart.discountAmount = 0;
     cart.discountType = null;
     cart.discountValue = 0;
+    cart.freeShipping = false;
     return cart;
   }
 
-  const subTotal = cart.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-
   const coupon = await Coupon.findOne({ code: cart.couponCode.toUpperCase(), isActive: true });
   if (!coupon) {
-    // Reset coupon if no longer valid
     cart.couponCode = null;
     cart.discountAmount = 0;
     cart.discountType = null;
     cart.discountValue = 0;
+    cart.freeShipping = false;
+    return cart;
+  }
+
+  const now = new Date();
+
+  // Check start date
+  if (coupon.startDate && now < coupon.startDate) {
+    cart.couponCode = null;
+    cart.discountAmount = 0;
+    cart.discountType = null;
+    cart.discountValue = 0;
+    cart.freeShipping = false;
     return cart;
   }
 
   // Check expiry
-  if (new Date() > coupon.expiryDate) {
+  if (now > coupon.expiryDate) {
     cart.couponCode = null;
     cart.discountAmount = 0;
     cart.discountType = null;
     cart.discountValue = 0;
+    cart.freeShipping = false;
     return cart;
   }
 
@@ -60,15 +73,48 @@ const recalculateCartDiscount = async (cart) => {
     cart.discountAmount = 0;
     cart.discountType = null;
     cart.discountValue = 0;
+    cart.freeShipping = false;
     return cart;
   }
 
-  // Check minimum order amount
-  if (subTotal < coupon.minOrderAmount) {
+  // Determine which items the coupon applies to
+  let applicableItems = cart.items;
+
+  // Category restriction: filter items to only those in applicable categories
+  if (coupon.applicableCategories && coupon.applicableCategories.length > 0) {
+    const applicableCatStrings = coupon.applicableCategories.map((c) => c.toString());
+
+    applicableItems = cart.items.filter((item) => {
+      if (!item.product) return false;
+      // item.product may be populated or just an ObjectId
+      const productCategory = item.product.category
+        ? getObjectIdString(item.product.category)
+        : null;
+      return productCategory && applicableCatStrings.includes(productCategory);
+    });
+
+    // If no items match the category, remove coupon
+    if (applicableItems.length === 0) {
+      cart.couponCode = null;
+      cart.discountAmount = 0;
+      cart.discountType = null;
+      cart.discountValue = 0;
+      cart.freeShipping = false;
+      return cart;
+    }
+  }
+
+  // Calculate subtotal from applicable items
+  const subTotal = applicableItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
+
+  // Check minimum order amount (against full cart total)
+  const fullSubTotal = cart.items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  if (fullSubTotal < coupon.minOrderAmount) {
     cart.couponCode = null;
     cart.discountAmount = 0;
     cart.discountType = null;
     cart.discountValue = 0;
+    cart.freeShipping = false;
     return cart;
   }
 
@@ -81,11 +127,18 @@ const recalculateCartDiscount = async (cart) => {
     }
   } else if (coupon.discountType === "Fixed") {
     discount = coupon.discountValue;
+  } else if (coupon.discountType === "FreeShipping") {
+    discount = 0;
+    cart.freeShipping = true;
   }
 
   cart.discountAmount = Math.min(discount, subTotal);
   cart.discountType = coupon.discountType;
   cart.discountValue = coupon.discountValue;
+
+  if (coupon.discountType !== "FreeShipping") {
+    cart.freeShipping = false;
+  }
 
   return cart;
 };
@@ -275,6 +328,7 @@ const clearCart = async (req, res) => {
       cart.discountAmount = 0;
       cart.discountType = null;
       cart.discountValue = 0;
+      cart.freeShipping = false;
       await cart.save();
     }
 
@@ -284,7 +338,7 @@ const clearCart = async (req, res) => {
   }
 };
 
-// Apply Coupon to Cart
+// Apply Coupon to Cart (Enhanced with all rules)
 const applyCoupon = async (req, res) => {
   try {
     const userId = getUserId(req);
@@ -294,39 +348,81 @@ const applyCoupon = async (req, res) => {
       throw new ApiError(400, "Coupon code is required");
     }
 
-    let cart = await Cart.findOne({ user: userId });
+    let cart = await Cart.findOne({ user: userId }).populate({ path: "items.product", populate: { path: "category" } });
     if (!cart || cart.items.length === 0) {
       throw new ApiError(400, "Cannot apply coupon to an empty cart");
     }
-
-    const subTotal = cart.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
 
     const coupon = await Coupon.findOne({ code: code.toUpperCase(), isActive: true });
     if (!coupon) {
       throw new ApiError(404, "Invalid coupon code");
     }
 
-    // Expiry check
-    if (new Date() > coupon.expiryDate) {
+    const now = new Date();
+
+    // 1. Check start date
+    if (coupon.startDate && now < coupon.startDate) {
+      throw new ApiError(400, "This coupon is not yet active");
+    }
+
+    // 2. Check expiry date
+    if (now > coupon.expiryDate) {
       throw new ApiError(400, "Coupon has expired");
     }
 
-    // Usage check
+    // 3. Check global usage limit
     if (coupon.usedCount >= coupon.usageLimit) {
       throw new ApiError(400, "Coupon usage limit reached");
     }
 
-    // Min order amount check
-    if (subTotal < coupon.minOrderAmount) {
-      throw new ApiError(400, `Minimum order amount of $${coupon.minOrderAmount} required to apply this coupon`);
+    // 4. Check per-customer usage limit
+    const customerUsageCount = await CouponUsage.countDocuments({
+      coupon: coupon._id,
+      user: userId,
+    });
+    if (customerUsageCount >= coupon.usageLimitPerCustomer) {
+      throw new ApiError(400, "You have already used this coupon the maximum number of times");
     }
 
-    cart.couponCode = coupon.code;
-    
-    await recalculateCartDiscount(cart);
-    await cart.save();
+    // 5. Check eligibility
+    if (coupon.eligibility === "logged_in" && !req.user?._id) {
+      throw new ApiError(400, "This coupon is only available for logged-in customers");
+    }
 
-    const populatedCart = await Cart.findById(cart._id).populate({ path: "items.product", populate: { path: "category" } }).populate("items.diamond");
+    // 6. Check stacking rules
+    if (!coupon.allowStacking && cart.couponCode && cart.couponCode !== code.toUpperCase()) {
+      throw new ApiError(400, "This coupon cannot be combined with other coupons. Remove the existing coupon first.");
+    }
+
+    // 7. Check minimum order amount
+    const subTotal = cart.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+    if (subTotal < coupon.minOrderAmount) {
+      throw new ApiError(400, `Minimum order amount of ₹${coupon.minOrderAmount} required to apply this coupon`);
+    }
+
+    // 8. Check applicable categories
+    if (coupon.applicableCategories && coupon.applicableCategories.length > 0) {
+      const applicableCatStrings = coupon.applicableCategories.map((c) => c.toString());
+      const hasMatchingCategory = cart.items.some((item) => {
+        if (!item.product || !item.product.category) return false;
+        const catId = getObjectIdString(item.product.category);
+        return applicableCatStrings.includes(catId);
+      });
+      if (!hasMatchingCategory) {
+        throw new ApiError(400, "This coupon is not applicable to the items in your cart");
+      }
+    }
+
+    // All checks passed — apply coupon
+    cart.couponCode = coupon.code;
+
+    // Re-fetch un-populated cart for saving
+    const rawCart = await Cart.findById(cart._id);
+    rawCart.couponCode = coupon.code;
+    await recalculateCartDiscount(rawCart);
+    await rawCart.save();
+
+    const populatedCart = await Cart.findById(rawCart._id).populate({ path: "items.product", populate: { path: "category" } }).populate("items.diamond");
     res.status(200).json(new ApiResponse(200, populatedCart, "Coupon applied successfully"));
   } catch (error) {
     res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));
@@ -347,6 +443,7 @@ const removeCoupon = async (req, res) => {
     cart.discountAmount = 0;
     cart.discountType = null;
     cart.discountValue = 0;
+    cart.freeShipping = false;
 
     await cart.save();
 

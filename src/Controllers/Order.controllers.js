@@ -1,6 +1,9 @@
 const Order = require("../Models/Order.Model");
+const Coupon = require("../Models/Coupon.Model");
+const CouponUsage = require("../Models/CouponUsage.Model");
 const ApiResponse = require("../Utils/ApiResponse");
 const ApiError = require("../Utils/ApiError");
+const logActivity = require("../Utils/logActivity");
 
 // Create Order
 const createOrder = async (req, res) => {
@@ -43,6 +46,30 @@ const createOrder = async (req, res) => {
       couponCode,
       shippingAddress,
     });
+
+    // ─── Coupon Usage Logging ───
+    if (couponCode) {
+      const coupon = await Coupon.findOne({ code: couponCode.toUpperCase() });
+      if (coupon) {
+        // Increment global used count
+        coupon.usedCount = (coupon.usedCount || 0) + 1;
+        await coupon.save();
+
+        // Create usage log for reporting & per-customer limit tracking
+        const userId = req.user ? req.user._id : req.body.userId;
+        if (userId) {
+          await CouponUsage.create({
+            coupon: coupon._id,
+            user: userId,
+            order: order._id,
+            code: coupon.code,
+            discountType: coupon.discountType,
+            discountAmount: discountAmount || 0,
+            orderTotal: totalAmount || 0,
+          });
+        }
+      }
+    }
 
     res.status(201).json(new ApiResponse(201, order, "Order placed successfully"));
   } catch (error) {
@@ -87,13 +114,45 @@ const updateOrderStatus = async (req, res) => {
     const order = await Order.findById(id);
     if (!order) throw new ApiError(404, "Order not found");
 
+    const originalStatus = order.orderStatus;
+    const originalPaymentStatus = order.paymentStatus;
+
     if (orderStatus) order.orderStatus = orderStatus;
     if (paymentStatus) order.paymentStatus = paymentStatus;
     if (trackingId) order.trackingId = trackingId;
 
     await order.save();
 
+    let changes = [];
+    if (orderStatus && originalStatus !== orderStatus) {
+      changes.push(`status to ${orderStatus}`);
+    }
+    if (paymentStatus && originalPaymentStatus !== paymentStatus) {
+      changes.push(`payment status to ${paymentStatus}`);
+    }
+    if (trackingId) {
+      changes.push(`tracking ID to ${trackingId}`);
+    }
+
+    const actionDesc = `Update order ${order.orderId || order._id}: changed ${changes.join(", ")}`;
+    await logActivity(req, "Update", actionDesc);
+
     res.status(200).json(new ApiResponse(200, order, "Order status updated successfully"));
+  } catch (error) {
+    res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));
+  }
+};
+
+// Get Order By ID
+const getOrderById = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const order = await Order.findById(id)
+      .populate("items.product")
+      .populate("items.diamond")
+      .populate("user");
+    if (!order) throw new ApiError(404, "Order not found");
+    res.status(200).json(new ApiResponse(200, order, "Order fetched successfully"));
   } catch (error) {
     res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));
   }
@@ -104,4 +163,5 @@ module.exports = {
   getAllOrders,
   getUserOrders,
   updateOrderStatus,
+  getOrderById,
 };

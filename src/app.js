@@ -24,6 +24,8 @@ const cartRoutes = require("./Routes/Cart.Routes");
 const wishlistRoutes = require("./Routes/Wishlist.Routes");
 const quotationRoutes = require("./Routes/Quotation.Routes");
 const herotextRoutes = require("./Routes/Herotext.Routes");
+const activityLogRoutes = require("./Routes/ActivityLog.Routes");
+const dashboardRoutes = require("./Routes/Dashboard.Routes");
 
 
 app.use(
@@ -63,6 +65,8 @@ app.use("/api/v1/cart", cartRoutes);
 app.use("/api/v1/wishlist", wishlistRoutes);
 app.use("/api/v1/quotation", quotationRoutes);
 app.use("/api/v1/herotext", herotextRoutes);
+app.use("/api/v1/activity-log", activityLogRoutes);
+app.use("/api/v1/dashboard", dashboardRoutes);
 
 
 module.exports = app;

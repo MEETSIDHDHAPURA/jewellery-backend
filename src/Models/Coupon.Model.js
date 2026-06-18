@@ -2,6 +2,7 @@ const mongoose = require("mongoose");
 
 const couponSchema = new mongoose.Schema(
   {
+    // ─── Core Fields ───
     code: {
       type: String,
       required: true,
@@ -9,9 +10,13 @@ const couponSchema = new mongoose.Schema(
       uppercase: true,
       trim: true,
     },
+    description: {
+      type: String,
+      default: "",
+    },
     discountType: {
       type: String,
-      enum: ["Percentage", "Fixed"],
+      enum: ["Percentage", "Fixed", "FreeShipping"],
       required: true,
     },
     discountValue: {
@@ -23,20 +28,59 @@ const couponSchema = new mongoose.Schema(
       default: 0,
     },
     maxDiscountAmount: {
-      type: Number, // Useful for percentage discounts
+      type: Number, // Cap for percentage discounts
+    },
+
+    // ─── Date Range ───
+    startDate: {
+      type: Date,
+      default: Date.now,
     },
     expiryDate: {
       type: Date,
       required: true,
     },
+
+    // ─── Usage Limits ───
     usageLimit: {
       type: Number,
       default: 100,
+    },
+    usageLimitPerCustomer: {
+      type: Number,
+      default: 1,
     },
     usedCount: {
       type: Number,
       default: 0,
     },
+
+    // ─── Eligibility Rules ───
+    eligibility: {
+      type: String,
+      enum: ["all", "logged_in"],
+      default: "all",
+    },
+
+    // ─── Category Restrictions (empty = all categories) ───
+    applicableCategories: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Category",
+      },
+    ],
+
+    // ─── Coupon Rules ───
+    allowStacking: {
+      type: Boolean,
+      default: false,
+    },
+    applyOnSaleProducts: {
+      type: Boolean,
+      default: true,
+    },
+
+    // ─── Status ───
     isActive: {
       type: Boolean,
       default: true,
@@ -44,5 +88,8 @@ const couponSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+couponSchema.index({ code: 1, isActive: 1 });
+couponSchema.index({ expiryDate: 1 });
 
 module.exports = mongoose.model("Coupon", couponSchema);

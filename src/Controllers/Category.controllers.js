@@ -3,6 +3,7 @@ const ApiResponse = require("../Utils/ApiResponse");
 const ApiError = require("../Utils/ApiError");
 const { clearLandingPageCache } = require("./LandingPage.controllers");
 const { uploadOnCloudinary, updateOnCloudinary, deleteFromCloudinary } = require("../Utils/Cloudinary");
+const logActivity = require("../Utils/logActivity");
 
 // Create Category
 const createCategory = async (req, res) => {
@@ -74,6 +75,7 @@ const createCategory = async (req, res) => {
     }
 
     clearLandingPageCache();
+    await logActivity(req, "Create", `create category: ${trimmedName}`);
     res.status(201).json(new ApiResponse(201, category, "Category created successfully"));
   } catch (error) {
     res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));
@@ -107,6 +109,7 @@ const updateCategory = async (req, res) => {
     if (!category) {
       throw new ApiError(404, "Category not found");
     }
+    const originalName = category.name;
 
     if (name) {
       const trimmedName = name.trim();
@@ -180,6 +183,11 @@ const updateCategory = async (req, res) => {
 
     await category.save();
 
+    const action = name && originalName !== name.trim()
+      ? `Update category ${originalName} to ${name.trim()}`
+      : `Update category: ${category.name}`;
+    await logActivity(req, "Update", action);
+
     clearLandingPageCache();
     res.status(200).json(new ApiResponse(200, category, "Category updated successfully"));
   } catch (error) {
@@ -222,6 +230,7 @@ const deleteCategory = async (req, res) => {
     }
 
     clearLandingPageCache();
+    await logActivity(req, "Delete", `Delete this category ${categoryName}`);
     res.status(200).json(new ApiResponse(200, {}, "Category deleted successfully"));
   } catch (error) {
     res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));

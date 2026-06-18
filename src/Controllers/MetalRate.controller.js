@@ -1,5 +1,6 @@
 const MetalRate = require("../Models/MetalRate.Model.js");
 const { recalculateAndSavePrices } = require("../Utils/Product.utils.js");
+const logActivity = require("../Utils/logActivity");
 
 // Get all metal rates
 exports.getMetalRates = async (req, res) => {
@@ -20,6 +21,17 @@ exports.updateMetalRates = async (req, res) => {
       return res.status(400).json({ success: false, message: "Invalid data format. Expected an array of rates." });
     }
 
+    // Fetch old rates
+    const oldRates = await MetalRate.find({
+      $or: rates.map(r => ({ metal: r.metal, purity: r.purity }))
+    });
+    
+    // Create a lookup map of old rates
+    const oldRatesMap = {};
+    oldRates.forEach(r => {
+      oldRatesMap[`${r.metal}_${r.purity}`] = r.pricePerGram;
+    });
+
     const updatedRates = await Promise.all(
       rates.map(async (rate) => {
         return await MetalRate.findOneAndUpdate(
@@ -37,6 +49,13 @@ exports.updateMetalRates = async (req, res) => {
     // Recalculate price of ONLY those products whose metal type is affected
     const updatedMetals = [...new Set(rates.map(r => r.metal))];
     await recalculateAndSavePrices(updatedMetals);
+
+    const logDetails = rates.map(r => {
+      const oldPrice = oldRatesMap[`${r.metal}_${r.purity}`] ?? 0;
+      return `${r.metal} (${r.purity}) from ₹${oldPrice} to ₹${r.pricePerGram}/g`;
+    }).join(", ");
+
+    await logActivity(req, "Update", `Update metal rates: ${logDetails}`);
 
     res.status(200).json({ success: true, message: "Rates updated successfully", data: updatedRates });
   } catch (error) {

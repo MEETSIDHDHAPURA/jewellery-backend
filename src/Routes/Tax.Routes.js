@@ -1,4 +1,5 @@
 const express = require("express");
+const { auth } = require("../Middlewares/auth.middleware");
 const {
   createTaxProvince,
   getAllTaxProvinces,
@@ -8,9 +9,9 @@ const {
 
 const router = express.Router();
 
-router.post("/", createTaxProvince);
+router.post("/", auth, createTaxProvince);
 router.get("/", getAllTaxProvinces);
-router.put("/:id", updateTaxProvince);
-router.delete("/:id", deleteTaxProvince);
+router.put("/:id", auth, updateTaxProvince);
+router.delete("/:id", auth, deleteTaxProvince);
 
 module.exports = router;

@@ -65,6 +65,10 @@ const cartSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+    freeShipping: {
+      type: Boolean,
+      default: false,
+    },
   },
   { timestamps: true }
 );

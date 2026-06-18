@@ -1,6 +1,8 @@
 const Review = require("../Models/Review.Model");
+const Order = require("../Models/Order.Model");
 const ApiError = require("../Utils/ApiError");
 const ApiResponse = require("../Utils/ApiResponse");
+const logActivity = require("../Utils/logActivity");
 const { uploadOnCloudinary } = require("../Utils/Cloudinary");
 
 // Add a new review to a product
@@ -11,13 +13,24 @@ const createReview = async (req, res) => {
 
     // Use req.user if authentication middleware is used, otherwise expect userId in body
     const user = req.user ? req.user.id : userId;
-    
+
     if (!user) {
       throw new ApiError(401, "User is required to submit a review");
     }
 
     if (!rating || !comment) {
       throw new ApiError(400, "Rating and comment are required");
+    }
+
+    // Verify user has purchased this product
+    const hasPurchased = await Order.findOne({
+      user: user,
+      "items.product": productId,
+      paymentStatus: { $in: ["Completed", "Pending"] },
+    });
+
+    if (!hasPurchased) {
+      throw new ApiError(403, "You can only review products you have purchased");
     }
 
     const media = [];
@@ -68,10 +81,13 @@ const deleteReview = async (req, res) => {
   try {
     const { reviewId } = req.params;
     const review = await Review.findByIdAndDelete(reviewId);
-    
+
     if (!review) {
       throw new ApiError(404, "Review not found");
     }
+
+    const shortComment = review.comment.length > 30 ? `${review.comment.substring(0, 30)}...` : review.comment;
+    await logActivity(req, "Delete", `Delete review (Rating: ${review.rating}) with comment: "${shortComment}"`);
 
     res.status(200).json(new ApiResponse(200, {}, "Review deleted successfully"));
   } catch (error) {
@@ -119,10 +135,34 @@ const getAllReviews = async (req, res) => {
   try {
     const reviews = await Review.find()
       .populate("user", "name email avatar")
-      .populate("product", "title images Price")
+      .populate("product", "title metalImages Price")
       .sort({ createdAt: -1 });
 
     res.status(200).json(new ApiResponse(200, reviews, "All reviews fetched successfully"));
+  } catch (error) {
+    res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));
+  }
+};
+
+// Check if a user has purchased a specific product
+const checkPurchaseStatus = async (req, res) => {
+  try {
+    const { productId } = req.params;
+    const userId = req.user ? req.user._id || req.user.id : req.query.userId;
+
+    if (!userId) {
+      return res.status(200).json(new ApiResponse(200, { hasPurchased: false }, "User not authenticated"));
+    }
+
+    const order = await Order.findOne({
+      user: userId,
+      "items.product": productId,
+      paymentStatus: { $in: ["Completed", "Pending"] },
+    });
+
+    res.status(200).json(
+      new ApiResponse(200, { hasPurchased: !!order }, order ? "User has purchased this product" : "User has not purchased this product")
+    );
   } catch (error) {
     res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));
   }
@@ -133,6 +173,7 @@ module.exports = {
   getProductReviews,
   deleteReview,
   updateReview,
-  getAllReviews
+  getAllReviews,
+  checkPurchaseStatus
 };
 
