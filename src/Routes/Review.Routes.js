@@ -23,4 +23,7 @@ router.delete("/:reviewId", auth, reviewController.deleteReview);
 // Route to update a review (supports adding new media files)
 router.patch("/:reviewId", upload.array("media", 5), reviewController.updateReview);
 
+// Route to toggle review visibility (admin hide/unhide)
+router.patch("/:reviewId/toggle-visibility", auth, reviewController.toggleReviewVisibility);
+
 module.exports = router;

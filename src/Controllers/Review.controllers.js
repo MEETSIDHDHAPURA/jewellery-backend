@@ -66,7 +66,7 @@ const createReview = async (req, res) => {
 const getProductReviews = async (req, res) => {
   try {
     const { productId } = req.params;
-    const reviews = await Review.find({ product: productId })
+    const reviews = await Review.find({ product: productId, isVisible: true })
       .populate("user", "name avatar")
       .sort({ createdAt: -1 });
 
@@ -168,12 +168,37 @@ const checkPurchaseStatus = async (req, res) => {
   }
 };
 
+const toggleReviewVisibility = async (req, res) => {
+  try {
+    const { reviewId } = req.params;
+    const review = await Review.findById(reviewId);
+
+    if (!review) {
+      throw new ApiError(404, "Review not found");
+    }
+
+    review.isVisible = !review.isVisible;
+    await review.save();
+
+    await logActivity(
+      req,
+      "Update",
+      `${review.isVisible ? "Unhide" : "Hide"} review (Rating: ${review.rating})`
+    );
+
+    res.status(200).json(new ApiResponse(200, review, `Review ${review.isVisible ? "visible" : "hidden"} successfully`));
+  } catch (error) {
+    res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));
+  }
+};
+
 module.exports = {
   createReview,
   getProductReviews,
   deleteReview,
   updateReview,
   getAllReviews,
-  checkPurchaseStatus
+  checkPurchaseStatus,
+  toggleReviewVisibility
 };
 

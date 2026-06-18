@@ -28,6 +28,10 @@ const reviewSchema = new mongoose.Schema(
         type: { type: String, enum: ["image", "video"], required: true },
       },
     ],
+    isVisible: {
+      type: Boolean,
+      default: true,
+    },
   },
   {
     timestamps: true,

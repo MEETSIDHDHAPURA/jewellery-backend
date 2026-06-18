@@ -493,7 +493,8 @@ const getProductById = async (req, res) => {
     const isWithin30 = product.createdAt ? (Date.now() - new Date(product.createdAt).getTime()) < 30 * 24 * 60 * 60 * 1000 : false;
     const mappedProduct = {
       ...product,
-      isNew: isWithin30 || product.isNew
+      isNew: isWithin30 || product.isNew,
+      hasPurchased: false
     };
 
     // Extract available filters from variants for the frontend
@@ -558,6 +559,7 @@ const getProductById = async (req, res) => {
 
     res.status(200).json(new ApiResponse(200, {
       product: mappedProduct,
+      hasPurchased: false,
       availableFilters: filters,
       pricingMetadata: {
         metalRates,
