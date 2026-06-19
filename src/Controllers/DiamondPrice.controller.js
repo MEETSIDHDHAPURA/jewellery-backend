@@ -119,10 +119,53 @@ const getDiamondPrices = async (req, res) => {
   try {
     const filter = {};
     if (req.query.diamondType && req.query.diamondType !== "all") filter.diamondType = req.query.diamondType;
-    if (req.query.shape && req.query.shape !== "all") filter.shape = req.query.shape;
     if (req.query.carat) filter.carat = Number(req.query.carat);
-    if (req.query.clarity && req.query.clarity !== "all") filter.clarity = req.query.clarity;
-    if (req.query.color && req.query.color !== "all") filter.color = req.query.color;
+
+    // Support multiple shapes
+    const shapeInput = req.query.shapes || req.query.shape;
+    if (shapeInput && shapeInput !== "all") {
+      const shapeArr = Array.isArray(shapeInput) ? shapeInput : (typeof shapeInput === 'string' ? shapeInput.split(',') : [shapeInput]);
+      if (shapeArr.length > 0) {
+        filter.shape = { $in: shapeArr };
+      }
+    }
+
+    // Support multiple clarities
+    const clarityInput = req.query.clarities || req.query.clarity;
+    if (clarityInput && clarityInput !== "all") {
+      const clarityArr = Array.isArray(clarityInput) ? clarityInput : (typeof clarityInput === 'string' ? clarityInput.split(',') : [clarityInput]);
+      if (clarityArr.length > 0) {
+        filter.clarity = { $in: clarityArr };
+      }
+    }
+
+    // Support multiple colors
+    const colorInput = req.query.colours || req.query.colors || req.query.color;
+    if (colorInput && colorInput !== "all") {
+      const colorArr = Array.isArray(colorInput) ? colorInput : (typeof colorInput === 'string' ? colorInput.split(',') : [colorInput]);
+      if (colorArr.length > 0) {
+        filter.color = { $in: colorArr };
+      }
+    }
+
+    // Support priceBand
+    if (req.query.priceBand !== undefined && req.query.priceBand !== null && req.query.priceBand !== '') {
+      const idx = Number(req.query.priceBand);
+      const bands = [
+        { min: 0, max: 130 },
+        { min: 130, max: 180 },
+        { min: 180, max: 230 },
+        { min: 230, max: 290 },
+        { min: 290, max: Infinity }
+      ];
+      const band = bands[idx];
+      if (band) {
+        filter.price = { $gte: band.min };
+        if (band.max !== Infinity) {
+          filter.price.$lt = band.max;
+        }
+      }
+    }
 
     if (req.query.search && req.query.search.trim() !== "") {
       const searchVal = req.query.search.trim();
@@ -147,12 +190,21 @@ const getDiamondPrices = async (req, res) => {
     const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 20));
     const skip = (page - 1) * limit;
 
+    let sortObj = { diamondType: 1, shape: 1, carat: 1, color: 1, clarity: 1 };
+    if (req.query.sort === 'price-asc') {
+      sortObj = { price: 1 };
+    } else if (req.query.sort === 'price-desc') {
+      sortObj = { price: -1 };
+    } else if (req.query.sort === 'name-asc') {
+      sortObj = { shape: 1 };
+    }
+
     // Run filtered query + count and stats queries in parallel (6 DB calls → 2 parallel batches)
     const [filteredResults, statsResults] = await Promise.all([
       // Batch 1: Filtered data + count
       Promise.all([
         DiamondPrice.find(filter)
-          .sort({ diamondType: 1, shape: 1, carat: 1, color: 1, clarity: 1 })
+          .sort(sortObj)
           .skip(skip)
           .limit(limit)
           .lean(),

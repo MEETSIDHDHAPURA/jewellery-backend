@@ -61,24 +61,29 @@ const couponSchema = new mongoose.Schema(
       enum: ["all", "logged_in"],
       default: "all",
     },
+    country: {
+      type: String,
+      default: "all",
+    },
+    province: {
+      type: String,
+      default: "",
+    },
 
     // ─── Category Restrictions (empty = all categories) ───
     applicableCategories: [
       {
-        type: mongoose.Schema.Types.ObjectId,
+        type: mongoose.Schema.Types.Mixed,
         ref: "Category",
       },
     ],
 
-    // ─── Coupon Rules ───
-    allowStacking: {
-      type: Boolean,
-      default: false,
-    },
-    applyOnSaleProducts: {
-      type: Boolean,
-      default: true,
-    },
+    // ─── Diamond Shape Restrictions (empty = all shapes) ───
+    applicableShapes: [
+      {
+        type: String,
+      },
+    ],
 
     // ─── Status ───
     isActive: {

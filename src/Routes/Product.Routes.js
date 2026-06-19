@@ -42,8 +42,8 @@ router.get("/all", productController.getAllProducts);
 
 router.get("/related/:id", productController.getRelatedProducts);
 
-router.get("/:id", productController.getProductById);
-router.get("/get/:id", productController.getProductById);
+router.get("/:id", auth, productController.getProductById);
+router.get("/get/:id", auth, productController.getProductById);
 
 // Update with multi-image and size chart upload
 router.put(

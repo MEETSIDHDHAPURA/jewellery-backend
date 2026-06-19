@@ -14,6 +14,8 @@ const { generateVariantCombinations } = require("../Utils/Product.utils");
 const fs = require("fs");
 const { clearLandingPageCache } = require("./LandingPage.controllers");
 const logActivity = require("../Utils/logActivity");
+const Order = require("../Models/Order.Model");
+
 
 // Simple In-memory cache for pricing metadata
 let globalMetadataCache = null;
@@ -69,7 +71,7 @@ const generateSKU = async (categoryId, subCategory) => {
   const subCatPrefix = subCategory
     ? subCategory.replace(/[^a-zA-Z]/g, "").substring(0, 2).toUpperCase()
     : "XX";
-  
+
   let unique = false;
   let attempts = 0;
   let sku = "";
@@ -92,10 +94,10 @@ const uploadFilesParallel = async (files, uploadFn) => {
       try {
         const uploadRes = await uploadFn(file.path);
         // Clean up temp file after upload
-        fs.unlink(file.path, () => {});
+        fs.unlink(file.path, () => { });
         return uploadRes ? uploadRes.secure_url : null;
       } catch {
-        fs.unlink(file.path, () => {});
+        fs.unlink(file.path, () => { });
         return null;
       }
     })
@@ -247,7 +249,7 @@ const createProduct = async (req, res) => {
       if (req.files.sizeChart) {
         miscUploads.push(
           uploadOnCloudinary(req.files.sizeChart[0].path).then(uploadRes => {
-            fs.unlink(req.files.sizeChart[0].path, () => {});
+            fs.unlink(req.files.sizeChart[0].path, () => { });
             if (uploadRes) sizeChart = uploadRes.secure_url;
           })
         );
@@ -255,7 +257,7 @@ const createProduct = async (req, res) => {
       if (req.files.certificate) {
         miscUploads.push(
           uploadOnCloudinary(req.files.certificate[0].path).then(uploadRes => {
-            fs.unlink(req.files.certificate[0].path, () => {});
+            fs.unlink(req.files.certificate[0].path, () => { });
             if (uploadRes) certificateFile = uploadRes.secure_url;
           })
         );
@@ -359,7 +361,8 @@ const getAllProducts = async (req, res) => {
   try {
     const {
       category, occasion, gender, metal, purity, minPrice, maxPrice,
-      isFeatured, search, page = 1, limit = 10, isActive
+      isFeatured, search, page = 1, limit = 10, isActive,
+      materials, genders, clarities, priceBand, sort
     } = req.query;
 
     // Validate & clamp pagination inputs
@@ -377,26 +380,45 @@ const getAllProducts = async (req, res) => {
       filter.isActive = true;
     }
 
-    // Category filter: single DB call with $or for plural/singular match
+    // Category filter: support multiple categories (comma-separated list or array)
     if (category) {
-      if (mongoose.Types.ObjectId.isValid(category)) {
-        filter.category = new mongoose.Types.ObjectId(category);
-      } else {
-        // Escape regex special characters to prevent ReDoS
-        const escaped = category.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const regexPatterns = [{ name: { $regex: new RegExp(`^${escaped}$`, "i") } }];
-        if (category.toLowerCase().endsWith('s')) {
-          const singularEscaped = escaped.slice(0, -1);
-          regexPatterns.push({ name: { $regex: new RegExp(`^${singularEscaped}$`, "i") } });
+      const categoryArr = Array.isArray(category) ? category : (typeof category === 'string' ? category.split(',') : [category]);
+      const categoryIds = [];
+      const categoryNames = [];
+
+      categoryArr.forEach(cat => {
+        if (mongoose.Types.ObjectId.isValid(cat)) {
+          categoryIds.push(new mongoose.Types.ObjectId(cat));
+        } else if (cat && cat.toLowerCase() !== 'all') {
+          categoryNames.push(cat);
         }
-        const foundCategory = await Category.findOne({ $or: regexPatterns }).lean();
-        filter.category = foundCategory ? foundCategory._id : new mongoose.Types.ObjectId();
+      });
+
+      if (categoryNames.length > 0) {
+        const regexPatterns = [];
+        categoryNames.forEach(catName => {
+          const escaped = catName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+          regexPatterns.push({ name: { $regex: new RegExp(`^${escaped}$`, "i") } });
+          if (catName.toLowerCase().endsWith('s')) {
+            const singularEscaped = escaped.slice(0, -1);
+            regexPatterns.push({ name: { $regex: new RegExp(`^${singularEscaped}$`, "i") } });
+          } else {
+            regexPatterns.push({ name: { $regex: new RegExp(`^${escaped}s$`, "i") } });
+          }
+        });
+
+        const foundCategories = await Category.find({ $or: regexPatterns }).select('_id').lean();
+        foundCategories.forEach(c => categoryIds.push(c._id));
+      }
+
+      if (categoryIds.length > 0) {
+        filter.category = { $in: categoryIds };
       }
     }
 
     if (gender) filter.gender = gender;
     if (isFeatured) filter.isFeatured = isFeatured === 'true';
-    if (occasion) filter.occasion = { $in: Array.isArray(occasion) ? occasion : [occasion] };
+    if (occasion) filter.occasion = { $in: Array.isArray(occasion) ? occasion : (typeof occasion === 'string' ? occasion.split(',') : [occasion]) };
 
     // Sanitize search input to prevent ReDoS
     if (search) {
@@ -411,8 +433,99 @@ const getAllProducts = async (req, res) => {
       if (maxPrice) filter.Price.$lte = Number(maxPrice);
     }
 
-    const skip = (safePage - 1) * safeLimit;
     const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+
+    // Apply New Filters
+    if (genders) {
+      const genderArr = Array.isArray(genders) ? genders : genders.split(',');
+      filter.gender = { $in: genderArr };
+    }
+
+    if (materials) {
+      const matArr = Array.isArray(materials) ? materials : materials.split(',');
+      const queryConditions = [];
+      matArr.forEach(m => {
+        const escaped = escapeRegex(m);
+        queryConditions.push({ allowedMetals: { $regex: new RegExp(escaped, 'i') } });
+        if (m.toLowerCase() === 'gold') {
+          queryConditions.push({ "metalImages.yellowGold.0": { $exists: true } });
+        } else if (m.toLowerCase().includes('white')) {
+          queryConditions.push({ "metalImages.whiteGold.0": { $exists: true } });
+        } else if (m.toLowerCase().includes('rose')) {
+          queryConditions.push({ "metalImages.roseGold.0": { $exists: true } });
+        } else if (m.toLowerCase().includes('silver')) {
+          queryConditions.push({ "metalImages.silver.0": { $exists: true } });
+        } else if (m.toLowerCase().includes('platinum')) {
+          queryConditions.push({ "metalImages.platinum.0": { $exists: true } });
+        }
+      });
+      if (queryConditions.length > 0) {
+        filter.$or = queryConditions;
+      }
+    }
+
+    if (clarities) {
+      const clarityArr = Array.isArray(clarities) ? clarities : clarities.split(',');
+      const queryConditions = [
+        { allowedClarities: { $in: clarityArr } },
+        { "diamondOptions.clarity": { $in: clarityArr } }
+      ];
+      if (filter.$or) {
+        filter.$and = filter.$and || [];
+        filter.$and.push({ $or: filter.$or });
+        delete filter.$or;
+        filter.$and.push({ $or: queryConditions });
+      } else {
+        filter.$or = queryConditions;
+      }
+    }
+
+    if (priceBand !== undefined && priceBand !== null && priceBand !== '') {
+      const idx = Number(priceBand);
+      const bands = [
+        { min: 0, max: 200 },
+        { min: 200, max: 500 },
+        { min: 500, max: 1000 },
+        { min: 1000, max: Infinity }
+      ];
+      const band = bands[idx];
+      if (band) {
+        filter.Price = { $gte: band.min };
+        if (band.max !== Infinity) {
+          filter.Price.$lt = band.max;
+        }
+      }
+    }
+
+    if (sort === 'featured') {
+      filter.isFeatured = true;
+    }
+
+    if (sort === 'newest') {
+      const newArrivalsQuery = [
+        { isNew: true },
+        { createdAt: { $gte: thirtyDaysAgo } }
+      ];
+      if (filter.$or) {
+        filter.$and = filter.$and || [];
+        filter.$and.push({ $or: filter.$or });
+        delete filter.$or;
+        filter.$and.push({ $or: newArrivalsQuery });
+      } else {
+        filter.$or = newArrivalsQuery;
+      }
+    }
+
+    let sortObj = { isNew: -1, createdAt: -1 };
+    if (sort === 'price-asc') {
+      sortObj = { Price: 1 };
+    } else if (sort === 'price-desc') {
+      sortObj = { Price: -1 };
+    } else if (sort === 'newest') {
+      sortObj = { isNew: -1, createdAt: -1 };
+    }
+
+    const skip = (safePage - 1) * safeLimit;
 
     // Single aggregation with $facet: get products + total count in one DB round-trip
     const result = await Product.aggregate([
@@ -427,7 +540,7 @@ const getAllProducts = async (req, res) => {
           }
         }
       },
-      { $sort: { isNew: -1, createdAt: -1 } },
+      { $sort: sortObj },
       {
         $facet: {
           products: [
@@ -493,8 +606,7 @@ const getProductById = async (req, res) => {
     const isWithin30 = product.createdAt ? (Date.now() - new Date(product.createdAt).getTime()) < 30 * 24 * 60 * 60 * 1000 : false;
     const mappedProduct = {
       ...product,
-      isNew: isWithin30 || product.isNew,
-      hasPurchased: false
+      isNew: isWithin30 || product.isNew
     };
 
     // Extract available filters from variants for the frontend
@@ -559,7 +671,6 @@ const getProductById = async (req, res) => {
 
     res.status(200).json(new ApiResponse(200, {
       product: mappedProduct,
-      hasPurchased: false,
       availableFilters: filters,
       pricingMetadata: {
         metalRates,
@@ -685,7 +796,7 @@ const updateProduct = async (req, res) => {
       if (req.files.sizeChart) {
         miscUploads.push(
           updateOnCloudinary(existing.sizeChart, req.files.sizeChart[0].path).then(uploadRes => {
-            fs.unlink(req.files.sizeChart[0].path, () => {});
+            fs.unlink(req.files.sizeChart[0].path, () => { });
             if (uploadRes) updateData.sizeChart = uploadRes.secure_url;
           })
         );
@@ -693,7 +804,7 @@ const updateProduct = async (req, res) => {
       if (req.files.certificate) {
         miscUploads.push(
           updateOnCloudinary(existing.certificate, req.files.certificate[0].path).then(uploadRes => {
-            fs.unlink(req.files.certificate[0].path, () => {});
+            fs.unlink(req.files.certificate[0].path, () => { });
             if (uploadRes) updateData.certificate = uploadRes.secure_url;
           })
         );
@@ -729,7 +840,7 @@ const updateProduct = async (req, res) => {
     let actionDescription = `update product ${product.title}`;
     const titleChanged = updateData.title && updateData.title !== originalTitle;
     const priceChanged = updateData.Price !== undefined && Number(updateData.Price) !== Number(originalPrice);
-    
+
     if (titleChanged && priceChanged) {
       actionDescription = `update product name "${originalTitle}" to "${product.title}" and price from ${originalPrice} to ${product.Price}`;
     } else if (titleChanged) {
@@ -1021,9 +1132,9 @@ const getRelatedProducts = async (req, res) => {
       isActive: true,
       isDeleted: false
     })
-    .limit(limit * 2)
-    .populate("category", "name")
-    .lean();
+      .limit(limit * 2)
+      .populate("category", "name")
+      .lean();
 
     // If not enough in the same category, get from other categories
     if (related.length < limit) {
@@ -1033,9 +1144,9 @@ const getRelatedProducts = async (req, res) => {
         isActive: true,
         isDeleted: false
       })
-      .limit(limit - related.length)
-      .populate("category", "name")
-      .lean();
+        .limit(limit - related.length)
+        .populate("category", "name")
+        .lean();
       related = [...related, ...extra];
     }
 

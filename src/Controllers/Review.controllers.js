@@ -133,7 +133,38 @@ const updateReview = async (req, res) => {
 // Get all reviews
 const getAllReviews = async (req, res) => {
   try {
-    const reviews = await Review.find()
+    const { search, rating } = req.query;
+    let filter = {};
+
+    if (rating && rating !== "all") {
+      filter.rating = Number(rating);
+    }
+
+    if (search) {
+      const User = require("../Models/User.Model");
+      const Product = require("../Models/Product.Model");
+
+      const matchingUsers = await User.find({
+        $or: [
+          { name: { $regex: search, $options: "i" } },
+          { email: { $regex: search, $options: "i" } }
+        ]
+      }).select("_id");
+      const userIds = matchingUsers.map(u => u._id);
+
+      const matchingProducts = await Product.find({
+        title: { $regex: search, $options: "i" }
+      }).select("_id");
+      const productIds = matchingProducts.map(p => p._id);
+
+      filter.$or = [
+        { comment: { $regex: search, $options: "i" } },
+        { user: { $in: userIds } },
+        { product: { $in: productIds } }
+      ];
+    }
+
+    const reviews = await Review.find(filter)
       .populate("user", "name email avatar")
       .populate("product", "title metalImages Price")
       .sort({ createdAt: -1 });

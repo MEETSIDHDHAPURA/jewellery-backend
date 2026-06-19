@@ -1,6 +1,7 @@
 const Cart = require("../Models/Cart.Model");
 const Coupon = require("../Models/Coupon.Model");
 const CouponUsage = require("../Models/CouponUsage.Model");
+const User = require("../Models/User.Model");
 const ApiResponse = require("../Utils/ApiResponse");
 const ApiError = require("../Utils/ApiError");
 
@@ -45,6 +46,40 @@ const recalculateCartDiscount = async (cart) => {
     return cart;
   }
 
+  // Check country and province limits
+  if (coupon.country && coupon.country !== "all") {
+    let finalCountry = "";
+    let finalProvince = "";
+    if (cart.user) {
+      const user = await User.findById(cart.user);
+      const defaultAddress = user?.addresses?.find(addr => addr.isDefault) || user?.addresses?.[0];
+      if (defaultAddress) {
+        finalCountry = defaultAddress.country;
+        finalProvince = defaultAddress.state;
+      }
+    }
+
+    if (!finalCountry || finalCountry.toLowerCase() !== coupon.country.toLowerCase()) {
+      cart.couponCode = null;
+      cart.discountAmount = 0;
+      cart.discountType = null;
+      cart.discountValue = 0;
+      cart.freeShipping = false;
+      return cart;
+    }
+
+    if (coupon.country.toUpperCase() === "USA" && coupon.province) {
+      if (!finalProvince || finalProvince.toLowerCase() !== coupon.province.toLowerCase()) {
+        cart.couponCode = null;
+        cart.discountAmount = 0;
+        cart.discountType = null;
+        cart.discountValue = 0;
+        cart.freeShipping = false;
+        return cart;
+      }
+    }
+  }
+
   const now = new Date();
 
   // Check start date
@@ -77,6 +112,17 @@ const recalculateCartDiscount = async (cart) => {
     return cart;
   }
 
+  if (cart.items && cart.items.length > 0) {
+    const needsProductPopulate = cart.items.some(item => item.product && !item.product.category);
+    const needsDiamondPopulate = cart.items.some(item => item.diamond && typeof item.diamond.shape === 'undefined');
+    if (needsProductPopulate || needsDiamondPopulate) {
+      await cart.populate([
+        { path: "items.product", populate: { path: "category" } },
+        { path: "items.diamond" }
+      ]);
+    }
+  }
+
   // Determine which items the coupon applies to
   let applicableItems = cart.items;
 
@@ -85,12 +131,24 @@ const recalculateCartDiscount = async (cart) => {
     const applicableCatStrings = coupon.applicableCategories.map((c) => c.toString());
 
     applicableItems = cart.items.filter((item) => {
-      if (!item.product) return false;
-      // item.product may be populated or just an ObjectId
-      const productCategory = item.product.category
-        ? getObjectIdString(item.product.category)
-        : null;
-      return productCategory && applicableCatStrings.includes(productCategory);
+      if (item.product) {
+        const productCategory = item.product.category
+          ? getObjectIdString(item.product.category)
+          : null;
+        return productCategory && applicableCatStrings.includes(productCategory);
+      }
+
+      if (item.diamond) {
+        if (applicableCatStrings.includes("diamond")) {
+          if (coupon.applicableShapes && coupon.applicableShapes.length > 0) {
+            const diamondShape = item.diamond.shape;
+            return diamondShape && coupon.applicableShapes.includes(diamondShape);
+          }
+          return true;
+        }
+      }
+
+      return false;
     });
 
     // If no items match the category, remove coupon
@@ -348,7 +406,9 @@ const applyCoupon = async (req, res) => {
       throw new ApiError(400, "Coupon code is required");
     }
 
-    let cart = await Cart.findOne({ user: userId }).populate({ path: "items.product", populate: { path: "category" } });
+    let cart = await Cart.findOne({ user: userId })
+      .populate({ path: "items.product", populate: { path: "category" } })
+      .populate("items.diamond");
     if (!cart || cart.items.length === 0) {
       throw new ApiError(400, "Cannot apply coupon to an empty cart");
     }
@@ -389,9 +449,9 @@ const applyCoupon = async (req, res) => {
       throw new ApiError(400, "This coupon is only available for logged-in customers");
     }
 
-    // 6. Check stacking rules
-    if (!coupon.allowStacking && cart.couponCode && cart.couponCode !== code.toUpperCase()) {
-      throw new ApiError(400, "This coupon cannot be combined with other coupons. Remove the existing coupon first.");
+    // 6. Check if another coupon is already applied
+    if (cart.couponCode && cart.couponCode !== code.toUpperCase()) {
+      throw new ApiError(400, "Only one coupon can be applied. Remove the existing coupon first.");
     }
 
     // 7. Check minimum order amount
@@ -404,12 +464,49 @@ const applyCoupon = async (req, res) => {
     if (coupon.applicableCategories && coupon.applicableCategories.length > 0) {
       const applicableCatStrings = coupon.applicableCategories.map((c) => c.toString());
       const hasMatchingCategory = cart.items.some((item) => {
-        if (!item.product || !item.product.category) return false;
-        const catId = getObjectIdString(item.product.category);
-        return applicableCatStrings.includes(catId);
+        if (item.product) {
+          if (!item.product.category) return false;
+          const catId = getObjectIdString(item.product.category);
+          return applicableCatStrings.includes(catId);
+        }
+        if (item.diamond) {
+          if (applicableCatStrings.includes("diamond")) {
+            if (coupon.applicableShapes && coupon.applicableShapes.length > 0) {
+              const diamondShape = item.diamond.shape;
+              return diamondShape && coupon.applicableShapes.includes(diamondShape);
+            }
+            return true;
+          }
+        }
+        return false;
       });
       if (!hasMatchingCategory) {
         throw new ApiError(400, "This coupon is not applicable to the items in your cart");
+      }
+    }
+
+    // 8.5 Check country and province limits
+    if (coupon.country && coupon.country !== "all") {
+      let finalCountry = req.body.country;
+      let finalProvince = req.body.province;
+
+      if (!finalCountry && userId) {
+        const user = await User.findById(userId);
+        const defaultAddress = user?.addresses?.find(addr => addr.isDefault) || user?.addresses?.[0];
+        if (defaultAddress) {
+          finalCountry = defaultAddress.country;
+          finalProvince = defaultAddress.state;
+        }
+      }
+
+      if (!finalCountry || finalCountry.toLowerCase() !== coupon.country.toLowerCase()) {
+        throw new ApiError(400, `This coupon is not available in your country (only valid for ${coupon.country})`);
+      }
+
+      if (coupon.country.toUpperCase() === "USA" && coupon.province) {
+        if (!finalProvince || finalProvince.toLowerCase() !== coupon.province.toLowerCase()) {
+          throw new ApiError(400, `This coupon is not available in your state (only valid for ${coupon.province})`);
+        }
       }
     }
 

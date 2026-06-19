@@ -20,8 +20,9 @@ const createCoupon = async (req, res) => {
       usageLimitPerCustomer,
       eligibility,
       applicableCategories,
-      allowStacking,
-      applyOnSaleProducts,
+      applicableShapes,
+      country,
+      province,
     } = req.body;
 
     if (!code || !discountType || discountValue === undefined || !expiryDate) {
@@ -44,8 +45,9 @@ const createCoupon = async (req, res) => {
       usageLimitPerCustomer,
       eligibility,
       applicableCategories,
-      allowStacking,
-      applyOnSaleProducts,
+      applicableShapes: applicableCategories?.includes("diamond") ? applicableShapes || [] : [],
+      country: country || "all",
+      province: country === "USA" ? province || "" : "",
     });
 
     await logActivity(req, "Create", `create coupon ${coupon.code}`);
@@ -78,9 +80,10 @@ const updateCoupon = async (req, res) => {
       "usageLimitPerCustomer",
       "eligibility",
       "applicableCategories",
-      "allowStacking",
-      "applyOnSaleProducts",
+      "applicableShapes",
       "isActive",
+      "country",
+      "province",
     ];
 
     const originalCode = coupon.code;
@@ -99,6 +102,14 @@ const updateCoupon = async (req, res) => {
           coupon[field] = req.body[field];
         }
       }
+    }
+
+    if (coupon.country !== "USA") {
+      coupon.province = "";
+    }
+
+    if (coupon.applicableCategories && !coupon.applicableCategories.includes("diamond")) {
+      coupon.applicableShapes = [];
     }
 
     await coupon.save();
@@ -148,7 +159,7 @@ const getCouponById = async (req, res) => {
 // ─── Get All Coupons (with optional filters) ───
 const getAllCoupons = async (req, res) => {
   try {
-    const { status } = req.query; // "active", "inactive", "expired"
+    const { status, search, discountType, country, eligibility } = req.query;
 
     let filter = {};
     const now = new Date();
@@ -160,6 +171,25 @@ const getAllCoupons = async (req, res) => {
       filter.isActive = false;
     } else if (status === "expired") {
       filter.expiryDate = { $lt: now };
+    }
+
+    if (search) {
+      filter.$or = [
+        { code: { $regex: search, $options: "i" } },
+        { description: { $regex: search, $options: "i" } },
+      ];
+    }
+
+    if (discountType && discountType !== "all") {
+      filter.discountType = discountType;
+    }
+
+    if (country && country !== "all") {
+      filter.country = country;
+    }
+
+    if (eligibility && eligibility !== "all") {
+      filter.eligibility = eligibility;
     }
 
     const coupons = await Coupon.find(filter)
@@ -196,7 +226,7 @@ const toggleCouponStatus = async (req, res) => {
 // ─── Validate Coupon (Enhanced with all rules) ───
 const validateCoupon = async (req, res) => {
   try {
-    const { code, orderAmount, userId, cartCategoryIds } = req.body;
+    const { code, orderAmount, userId, cartCategoryIds, cartDiamondShapes, country, province } = req.body;
 
     if (!code) throw new ApiError(400, "Coupon code is required");
 
@@ -242,13 +272,58 @@ const validateCoupon = async (req, res) => {
     }
 
     // 7. Check applicable categories
-    if (coupon.applicableCategories && coupon.applicableCategories.length > 0 && cartCategoryIds) {
+    if (coupon.applicableCategories && coupon.applicableCategories.length > 0) {
       const applicableCatStrings = coupon.applicableCategories.map((c) => c.toString());
-      const hasMatchingCategory = cartCategoryIds.some((catId) =>
-        applicableCatStrings.includes(catId.toString())
-      );
+      let hasMatchingCategory = false;
+
+      if (cartCategoryIds && cartCategoryIds.length > 0) {
+        hasMatchingCategory = cartCategoryIds.some((catId) =>
+          applicableCatStrings.includes(catId.toString())
+        );
+      }
+
+      if (!hasMatchingCategory && applicableCatStrings.includes("diamond")) {
+        if (coupon.applicableShapes && coupon.applicableShapes.length > 0) {
+          if (cartDiamondShapes && cartDiamondShapes.length > 0) {
+            hasMatchingCategory = cartDiamondShapes.some((shape) =>
+              coupon.applicableShapes.includes(shape)
+            );
+          }
+        } else {
+          if (cartDiamondShapes && cartDiamondShapes.length > 0) {
+            hasMatchingCategory = true;
+          }
+        }
+      }
+
       if (!hasMatchingCategory) {
         throw new ApiError(400, "This coupon is not applicable to the items in your cart");
+      }
+    }
+
+    // 7.5 Check country and province limits
+    if (coupon.country && coupon.country !== "all") {
+      let finalCountry = country;
+      let finalProvince = province;
+      
+      if (!finalCountry && userId) {
+        const User = require("../Models/User.Model");
+        const user = await User.findById(userId);
+        const defaultAddress = user?.addresses?.find(addr => addr.isDefault) || user?.addresses?.[0];
+        if (defaultAddress) {
+          finalCountry = defaultAddress.country;
+          finalProvince = defaultAddress.state;
+        }
+      }
+
+      if (!finalCountry || finalCountry.toLowerCase() !== coupon.country.toLowerCase()) {
+        throw new ApiError(400, `This coupon is not available in your country (only valid for ${coupon.country})`);
+      }
+
+      if (coupon.country.toUpperCase() === "USA" && coupon.province) {
+        if (!finalProvince || finalProvince.toLowerCase() !== coupon.province.toLowerCase()) {
+          throw new ApiError(400, `This coupon is not available in your state (only valid for ${coupon.province})`);
+        }
       }
     }
 
