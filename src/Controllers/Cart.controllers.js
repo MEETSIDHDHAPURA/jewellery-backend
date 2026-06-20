@@ -4,6 +4,7 @@ const CouponUsage = require("../Models/CouponUsage.Model");
 const User = require("../Models/User.Model");
 const ApiResponse = require("../Utils/ApiResponse");
 const ApiError = require("../Utils/ApiError");
+const mongoose = require("mongoose");
 
 // Helper to get string representation of ObjectId (populated or unpopulated)
 const getObjectIdString = (field) => {
@@ -15,6 +16,35 @@ const getObjectIdString = (field) => {
 const normalizeVal = (val) => {
   if (val === undefined || val === null) return "";
   return String(val).toLowerCase().replace(/[\s_-]/g, "");
+};
+
+// Helper to format generic diamonds dynamically in cart responses
+const formatCartResponse = (cart) => {
+  if (!cart) return null;
+  const cartObj = cart.toObject ? cart.toObject() : cart;
+
+  if (cartObj.items && Array.isArray(cartObj.items)) {
+    cartObj.items = cartObj.items.map((item) => {
+      const isLooseDiamond = item.metal === "—" || item.diamond || item.shape;
+      if (isLooseDiamond && !item.diamond) {
+        item.diamond = {
+          _id: item._id,
+          shape: item.shape || item.product || "Round",
+          carat: Number(item.carat) || 1.0,
+          clarity: item.clarity || "VS1",
+          color: item.color || "G",
+          diamondType: item.diamondType || "Lab Grown",
+          price: item.price,
+          image: [],
+          sku: item.sku || `${(item.shape || "ROUND").toUpperCase()}-${item.carat || "1.00"}-${item.color || "G"}-${item.clarity || "VS1"}`
+        };
+        item.product = null;
+      }
+      return item;
+    });
+  }
+
+  return cartObj;
 };
 
 // Helper to get user ID from request (token or body/query)
@@ -113,13 +143,18 @@ const recalculateCartDiscount = async (cart) => {
   }
 
   if (cart.items && cart.items.length > 0) {
-    const needsProductPopulate = cart.items.some(item => item.product && !item.product.category);
-    const needsDiamondPopulate = cart.items.some(item => item.diamond && typeof item.diamond.shape === 'undefined');
-    if (needsProductPopulate || needsDiamondPopulate) {
-      await cart.populate([
-        { path: "items.product", populate: { path: "category" } },
-        { path: "items.diamond" }
-      ]);
+    const needsProductPopulate = cart.items.some(item => item.product && mongoose.Types.ObjectId.isValid(item.product) && !item.product.category);
+    const needsDiamondPopulate = cart.items.some(item => item.diamond && mongoose.Types.ObjectId.isValid(item.diamond) && typeof item.diamond.shape === 'undefined');
+    
+    const populatePaths = [];
+    if (needsProductPopulate) {
+      populatePaths.push({ path: "items.product", populate: { path: "category" } });
+    }
+    if (needsDiamondPopulate) {
+      populatePaths.push({ path: "items.diamond" });
+    }
+    if (populatePaths.length > 0) {
+      await cart.populate(populatePaths);
     }
   }
 
@@ -131,21 +166,20 @@ const recalculateCartDiscount = async (cart) => {
     const applicableCatStrings = coupon.applicableCategories.map((c) => c.toString());
 
     applicableItems = cart.items.filter((item) => {
-      if (item.product) {
-        const productCategory = item.product.category
-          ? getObjectIdString(item.product.category)
-          : null;
-        return productCategory && applicableCatStrings.includes(productCategory);
-      }
-
-      if (item.diamond) {
+      const isItemLooseDiamond = item.metal === "—" || item.diamond || item.shape;
+      if (isItemLooseDiamond) {
         if (applicableCatStrings.includes("diamond")) {
           if (coupon.applicableShapes && coupon.applicableShapes.length > 0) {
-            const diamondShape = item.diamond.shape;
+            const diamondShape = item.diamond ? item.diamond.shape : (item.shape || item.product);
             return diamondShape && coupon.applicableShapes.includes(diamondShape);
           }
           return true;
         }
+      } else if (item.product && mongoose.Types.ObjectId.isValid(item.product)) {
+        const productCategory = item.product.category
+          ? getObjectIdString(item.product.category)
+          : null;
+        return productCategory && applicableCatStrings.includes(productCategory);
       }
 
       return false;
@@ -217,7 +251,7 @@ const getCart = async (req, res) => {
       cart = await Cart.findById(cart._id).populate({ path: "items.product", populate: { path: "category" } }).populate("items.diamond");
     }
     
-    res.status(200).json(new ApiResponse(200, cart, "Cart fetched successfully"));
+    res.status(200).json(new ApiResponse(200, formatCartResponse(cart), "Cart fetched successfully"));
   } catch (error) {
     res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));
   }
@@ -242,18 +276,60 @@ const addToCart = async (req, res) => {
       cart = await Cart.create({ user: userId, items: [] });
     }
 
-    if (diamond) {
-      // Check if this loose diamond is already in the cart
-      const existingItemIndex = cart.items.findIndex(
-        (item) => item.diamond && getObjectIdString(item.diamond) === diamond.toString()
-      );
+    const diamondShapes = ["Round", "Oval", "Cushion", "Princess", "Pear", "Radiant", "Emerald", "Marquise", "Heart", "Asscher"];
+    const isGenericShape = typeof product === "string" && diamondShapes.includes(product);
+    const isMetalEmpty = metal === "—";
+    const isLooseDiamond = isGenericShape || isMetalEmpty || (diamond && mongoose.Types.ObjectId.isValid(diamond));
+
+    if (isLooseDiamond) {
+      let cartDiamond = null;
+      let cartShape = null;
+
+      if (diamond && mongoose.Types.ObjectId.isValid(diamond)) {
+        cartDiamond = diamond;
+      } else if (product && mongoose.Types.ObjectId.isValid(product)) {
+        cartDiamond = product;
+      } else if (product && typeof product === "string" && diamondShapes.includes(product)) {
+        cartShape = product;
+      }
+
+      // Check if this loose diamond (specific or generic) is already in the cart
+      const existingItemIndex = cart.items.findIndex((item) => {
+        const isItemLooseDiamond = item.metal === "—" || item.diamond || item.shape;
+        if (!isItemLooseDiamond) return false;
+
+        if (cartDiamond && item.diamond) {
+          return item.diamond.toString() === cartDiamond.toString();
+        }
+        
+        if (!cartDiamond && !item.diamond) {
+          const itemShape = item.shape || item.product;
+          return (
+            normalizeVal(itemShape) === normalizeVal(cartShape) &&
+            normalizeVal(item.carat) === normalizeVal(carat) &&
+            normalizeVal(item.clarity) === normalizeVal(clarity) &&
+            normalizeVal(item.color) === normalizeVal(color) &&
+            normalizeVal(item.diamondType) === normalizeVal(diamondType)
+          );
+        }
+
+        return false;
+      });
 
       if (existingItemIndex > -1) {
         cart.items[existingItemIndex].quantity += Number(quantity);
         cart.items[existingItemIndex].price = price;
       } else {
         cart.items.push({
-          diamond,
+          product: null,
+          diamond: cartDiamond,
+          shape: cartShape,
+          metal: metal || "—",
+          carat,
+          clarity,
+          color,
+          size,
+          diamondType,
           quantity: Number(quantity),
           price,
         });
@@ -282,6 +358,8 @@ const addToCart = async (req, res) => {
       } else {
         cart.items.push({
           product,
+          diamond: null,
+          shape: null,
           metal,
           carat,
           clarity,
@@ -299,7 +377,7 @@ const addToCart = async (req, res) => {
     
     // Return the populated cart
     const populatedCart = await Cart.findById(cart._id).populate({ path: "items.product", populate: { path: "category" } }).populate("items.diamond");
-    res.status(200).json(new ApiResponse(200, populatedCart, "Item added to cart successfully"));
+    res.status(200).json(new ApiResponse(200, formatCartResponse(populatedCart), "Item added to cart successfully"));
   } catch (error) {
     res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));
   }
@@ -337,7 +415,7 @@ const updateCartItem = async (req, res) => {
     await cart.save();
 
     const populatedCart = await Cart.findById(cart._id).populate({ path: "items.product", populate: { path: "category" } }).populate("items.diamond");
-    res.status(200).json(new ApiResponse(200, populatedCart, "Cart item updated successfully"));
+    res.status(200).json(new ApiResponse(200, formatCartResponse(populatedCart), "Cart item updated successfully"));
   } catch (error) {
     res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));
   }
@@ -368,7 +446,7 @@ const removeFromCart = async (req, res) => {
     await cart.save();
 
     const populatedCart = await Cart.findById(cart._id).populate({ path: "items.product", populate: { path: "category" } }).populate("items.diamond");
-    res.status(200).json(new ApiResponse(200, populatedCart, "Item removed from cart successfully"));
+    res.status(200).json(new ApiResponse(200, formatCartResponse(populatedCart), "Item removed from cart successfully"));
   } catch (error) {
     res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));
   }
@@ -390,7 +468,7 @@ const clearCart = async (req, res) => {
       await cart.save();
     }
 
-    res.status(200).json(new ApiResponse(200, cart, "Cart cleared successfully"));
+    res.status(200).json(new ApiResponse(200, formatCartResponse(cart), "Cart cleared successfully"));
   } catch (error) {
     res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));
   }
@@ -464,19 +542,19 @@ const applyCoupon = async (req, res) => {
     if (coupon.applicableCategories && coupon.applicableCategories.length > 0) {
       const applicableCatStrings = coupon.applicableCategories.map((c) => c.toString());
       const hasMatchingCategory = cart.items.some((item) => {
-        if (item.product) {
-          if (!item.product.category) return false;
-          const catId = getObjectIdString(item.product.category);
-          return applicableCatStrings.includes(catId);
-        }
-        if (item.diamond) {
+        const isItemLooseDiamond = item.metal === "—" || item.diamond || item.shape;
+        if (isItemLooseDiamond) {
           if (applicableCatStrings.includes("diamond")) {
             if (coupon.applicableShapes && coupon.applicableShapes.length > 0) {
-              const diamondShape = item.diamond.shape;
+              const diamondShape = item.diamond ? item.diamond.shape : (item.shape || item.product);
               return diamondShape && coupon.applicableShapes.includes(diamondShape);
             }
             return true;
           }
+        } else if (item.product) {
+          if (!item.product.category) return false;
+          const catId = getObjectIdString(item.product.category);
+          return applicableCatStrings.includes(catId);
         }
         return false;
       });
@@ -520,7 +598,7 @@ const applyCoupon = async (req, res) => {
     await rawCart.save();
 
     const populatedCart = await Cart.findById(rawCart._id).populate({ path: "items.product", populate: { path: "category" } }).populate("items.diamond");
-    res.status(200).json(new ApiResponse(200, populatedCart, "Coupon applied successfully"));
+    res.status(200).json(new ApiResponse(200, formatCartResponse(populatedCart), "Coupon applied successfully"));
   } catch (error) {
     res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));
   }
@@ -545,7 +623,7 @@ const removeCoupon = async (req, res) => {
     await cart.save();
 
     const populatedCart = await Cart.findById(cart._id).populate({ path: "items.product", populate: { path: "category" } }).populate("items.diamond");
-    res.status(200).json(new ApiResponse(200, populatedCart, "Coupon removed successfully"));
+    res.status(200).json(new ApiResponse(200, formatCartResponse(populatedCart), "Coupon removed successfully"));
   } catch (error) {
     res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));
   }

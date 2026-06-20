@@ -2,14 +2,19 @@ const mongoose = require("mongoose");
 
 const cartItemSchema = new mongoose.Schema({
   product: {
-    type: mongoose.Schema.Types.ObjectId,
+    type: mongoose.Schema.Types.Mixed,
     ref: "Product",
+    default: null,
   },
   diamond: {
-    type: mongoose.Schema.Types.ObjectId,
+    type: mongoose.Schema.Types.Mixed,
     ref: "DiamondPrice",
+    default: null,
   },
   metal: {
+    type: String,
+  },
+  shape: {
     type: String,
   },
   carat: {

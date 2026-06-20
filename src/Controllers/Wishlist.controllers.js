@@ -18,7 +18,9 @@ const formatWishlist = (wishlist) => {
   const wishlistObj = typeof wishlist.toObject === 'function' ? wishlist.toObject() : wishlist;
 
   if (!wishlistObj.products) wishlistObj.products = [];
+  else wishlistObj.products = wishlistObj.products.filter(Boolean);
   if (!wishlistObj.diamonds) wishlistObj.diamonds = [];
+  else wishlistObj.diamonds = wishlistObj.diamonds.filter(Boolean);
 
   if (wishlistObj.diamonds && wishlistObj.diamonds.length > 0) {
     const mappedDiamonds = wishlistObj.diamonds.map(d => {
@@ -30,7 +32,7 @@ const formatWishlist = (wishlist) => {
         isSoldOut: d.isSoldOut || false,
         category: { name: "Loose Diamonds" },
         metalImages: {
-          yellowGold: [d.image || ""]
+          yellowGold: Array.isArray(d.image) ? d.image : [d.image || ""]
         }
       };
     }).filter(Boolean);
@@ -88,7 +90,7 @@ const addToWishlist = async (req, res) => {
 
     if (isDiamond) {
       const alreadyExists = wishlist.diamonds.some(
-        (id) => id.toString() === productId.toString()
+        (id) => id && id.toString() === productId.toString()
       );
       if (alreadyExists) {
         throw new ApiError(400, "Diamond already in wishlist");
@@ -96,7 +98,7 @@ const addToWishlist = async (req, res) => {
       wishlist.diamonds.push(productId);
     } else {
       const alreadyExists = wishlist.products.some(
-        (id) => id.toString() === productId.toString()
+        (id) => id && id.toString() === productId.toString()
       );
       if (alreadyExists) {
         throw new ApiError(400, "Product already in wishlist");
@@ -136,11 +138,11 @@ const removeFromWishlist = async (req, res) => {
     }
 
     const productIndex = wishlist.products.findIndex(
-      (id) => id.toString() === productId.toString()
+      (id) => id && id.toString() === productId.toString()
     );
 
     const diamondIndex = wishlist.diamonds.findIndex(
-      (id) => id.toString() === productId.toString()
+      (id) => id && id.toString() === productId.toString()
     );
 
     if (productIndex === -1 && diamondIndex === -1) {
@@ -193,7 +195,7 @@ const toggleWishlist = async (req, res) => {
     let message;
     if (isDiamond) {
       const diamondIndex = wishlist.diamonds.findIndex(
-        (id) => id.toString() === productId.toString()
+        (id) => id && id.toString() === productId.toString()
       );
       if (diamondIndex > -1) {
         wishlist.diamonds.splice(diamondIndex, 1);
@@ -204,7 +206,7 @@ const toggleWishlist = async (req, res) => {
       }
     } else {
       const productIndex = wishlist.products.findIndex(
-        (id) => id.toString() === productId.toString()
+        (id) => id && id.toString() === productId.toString()
       );
       if (productIndex > -1) {
         wishlist.products.splice(productIndex, 1);
