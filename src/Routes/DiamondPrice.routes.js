@@ -7,6 +7,7 @@ const {
   getDiamondPriceById,
   updateDiamondPrice,
   deleteDiamondPrice,
+  getRelatedDiamonds,
 } = require("../Controllers/DiamondPrice.controller.js");
 const upload = require("../Middlewares/multer.middleware");
 
@@ -24,6 +25,7 @@ router.post(
 router.post("/bulk", auth, bulkCreateDiamondPrices);
 router.get("/", getDiamondPrices);
 router.get("/:id", getDiamondPriceById);
+router.get("/:id/related", getRelatedDiamonds);
 router.put(
   "/:id",
   auth,

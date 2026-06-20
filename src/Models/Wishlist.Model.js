@@ -14,6 +14,12 @@ const wishlistSchema = new mongoose.Schema(
         ref: "Product",
       },
     ],
+    diamonds: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "DiamondPrice",
+      },
+    ],
   },
   { timestamps: true }
 );

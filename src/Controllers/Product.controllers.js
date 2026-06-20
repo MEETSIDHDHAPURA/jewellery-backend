@@ -362,7 +362,7 @@ const getAllProducts = async (req, res) => {
     const {
       category, occasion, gender, metal, purity, minPrice, maxPrice,
       isFeatured, search, page = 1, limit = 10, isActive,
-      materials, genders, clarities, priceBand, sort
+      materials, genders, clarities, priceBand, sort, subCategory, subcategory
     } = req.query;
 
     // Validate & clamp pagination inputs
@@ -419,6 +419,11 @@ const getAllProducts = async (req, res) => {
     if (gender) filter.gender = gender;
     if (isFeatured) filter.isFeatured = isFeatured === 'true';
     if (occasion) filter.occasion = { $in: Array.isArray(occasion) ? occasion : (typeof occasion === 'string' ? occasion.split(',') : [occasion]) };
+
+    const subCat = subCategory || subcategory;
+    if (subCat) {
+      filter.subCategory = { $regex: new RegExp(`^${escapeRegex(subCat)}$`, "i") };
+    }
 
     // Sanitize search input to prevent ReDoS
     if (search) {

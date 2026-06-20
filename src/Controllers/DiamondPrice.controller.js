@@ -355,6 +355,89 @@ const deleteDiamondPrice = async (req, res) => {
   }
 };
 
+// Get Related Diamonds (10 suggestions with variety)
+const getRelatedDiamonds = async (req, res) => {
+  try {
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      throw new ApiError(400, "Invalid diamond price ID");
+    }
+
+    const diamond = await DiamondPrice.findById(req.params.id).lean();
+    if (!diamond) {
+      throw new ApiError(404, "Diamond not found");
+    }
+
+    const excludeId = diamond._id;
+    const LIMIT = 10;
+
+    // Strategy: gather candidates from multiple queries in parallel, then deduplicate and pick 10
+    const [sameShapeDiffColor, sameShapeDiffCarat, diffShapeSameCarat, diffShapeDiffCarat] = await Promise.all([
+      // 1. Same shape, same carat, different color
+      DiamondPrice.find({
+        _id: { $ne: excludeId },
+        shape: diamond.shape,
+        carat: diamond.carat,
+        color: { $ne: diamond.color },
+        isActive: true,
+      })
+        .limit(4)
+        .lean(),
+
+      // 2. Same shape, different carat
+      DiamondPrice.find({
+        _id: { $ne: excludeId },
+        shape: diamond.shape,
+        carat: { $ne: diamond.carat },
+        isActive: true,
+      })
+        .limit(4)
+        .lean(),
+
+      // 3. Different shape, same carat
+      DiamondPrice.find({
+        _id: { $ne: excludeId },
+        shape: { $ne: diamond.shape },
+        carat: diamond.carat,
+        isActive: true,
+      })
+        .limit(4)
+        .lean(),
+
+      // 4. Different shape, different carat (broad variety)
+      DiamondPrice.find({
+        _id: { $ne: excludeId },
+        shape: { $ne: diamond.shape },
+        carat: { $ne: diamond.carat },
+        isActive: true,
+      })
+        .limit(4)
+        .lean(),
+    ]);
+
+    // Deduplicate by _id and cap at 10
+    const seen = new Set();
+    const related = [];
+
+    for (const pool of [sameShapeDiffColor, sameShapeDiffCarat, diffShapeSameCarat, diffShapeDiffCarat]) {
+      for (const d of pool) {
+        const id = d._id.toString();
+        if (!seen.has(id)) {
+          seen.add(id);
+          related.push(d);
+        }
+        if (related.length >= LIMIT) break;
+      }
+      if (related.length >= LIMIT) break;
+    }
+
+    res.status(200).json(
+      new ApiResponse(200, related, "Related diamonds fetched successfully")
+    );
+  } catch (error) {
+    res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));
+  }
+};
+
 module.exports = {
   createDiamondPrice,
   bulkCreateDiamondPrices,
@@ -362,4 +445,5 @@ module.exports = {
   getDiamondPriceById,
   updateDiamondPrice,
   deleteDiamondPrice,
+  getRelatedDiamonds,
 };
