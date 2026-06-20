@@ -17,7 +17,7 @@ router.post(
   "/",
   auth,
   upload.fields([
-    { name: "image", maxCount: 1 },
+    { name: "image", maxCount: 10 },
     { name: "certificate", maxCount: 1 },
   ]),
   createDiamondPrice
@@ -30,7 +30,7 @@ router.put(
   "/:id",
   auth,
   upload.fields([
-    { name: "image", maxCount: 1 },
+    { name: "image", maxCount: 10 },
     { name: "certificate", maxCount: 1 },
   ]),
   updateDiamondPrice

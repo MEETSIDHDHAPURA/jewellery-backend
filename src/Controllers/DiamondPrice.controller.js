@@ -18,19 +18,21 @@ const createDiamondPrice = async (req, res) => {
       throw new ApiError(400, "shape, carat, clarity, and color are required");
     }
 
-    let imageUrl = "";
+    let imageUrls = [];
     let certificateUrl = "";
 
     if (req.files) {
-      // Upload image and certificate in parallel
+      // Upload images and certificate in parallel
       const uploadPromises = [];
       if (req.files.image) {
-        uploadPromises.push(
-          uploadOnCloudinary(req.files.image[0].path).then(uploadRes => {
-            fs.unlink(req.files.image[0].path, () => {});
-            if (uploadRes) imageUrl = uploadRes.secure_url;
-          })
-        );
+        req.files.image.forEach(file => {
+          uploadPromises.push(
+            uploadOnCloudinary(file.path).then(uploadRes => {
+              fs.unlink(file.path, () => {});
+              if (uploadRes) imageUrls.push(uploadRes.secure_url);
+            })
+          );
+        });
       }
       if (req.files.certificate) {
         uploadPromises.push(
@@ -52,7 +54,7 @@ const createDiamondPrice = async (req, res) => {
       price: price || 0,
       stock: stock || 0,
       isSoldOut: isSoldOut !== undefined ? isSoldOut : false,
-      image: imageUrl,
+      image: imageUrls,
       certificate: certificateUrl,
     });
 
@@ -282,16 +284,42 @@ const updateDiamondPrice = async (req, res) => {
 
     const updateData = { ...req.body };
 
+    let existingImages = [];
+    if (req.body.existingImages) {
+      try {
+        existingImages = JSON.parse(req.body.existingImages);
+      } catch (e) {
+        existingImages = Array.isArray(req.body.existingImages) ? req.body.existingImages : [req.body.existingImages];
+      }
+    } else if (req.body.existingImages === undefined) {
+      existingImages = Array.isArray(existing.image)
+        ? existing.image
+        : (existing.image ? [existing.image] : []);
+    }
+
+    const currentImages = Array.isArray(existing.image)
+      ? existing.image
+      : (existing.image ? [existing.image] : []);
+
+    // Delete removed images from Cloudinary
+    const deletedImages = currentImages.filter(img => !existingImages.includes(img));
+    if (deletedImages.length > 0) {
+      await Promise.all(deletedImages.map(img => deleteFromCloudinary(img).catch(err => console.error("Cloudinary delete error:", err))));
+    }
+
+    let imageUrls = [...existingImages];
+
     if (req.files) {
-      // Upload image and certificate in parallel
       const uploadPromises = [];
       if (req.files.image) {
-        uploadPromises.push(
-          updateOnCloudinary(existing.image, req.files.image[0].path).then(uploadRes => {
-            fs.unlink(req.files.image[0].path, () => {});
-            if (uploadRes) updateData.image = uploadRes.secure_url;
-          })
-        );
+        req.files.image.forEach(file => {
+          uploadPromises.push(
+            uploadOnCloudinary(file.path).then(uploadRes => {
+              fs.unlink(file.path, () => {});
+              if (uploadRes) imageUrls.push(uploadRes.secure_url);
+            })
+          );
+        });
       }
       if (req.files.certificate) {
         uploadPromises.push(
@@ -303,6 +331,8 @@ const updateDiamondPrice = async (req, res) => {
       }
       if (uploadPromises.length > 0) await Promise.all(uploadPromises);
     }
+
+    updateData.image = imageUrls;
 
     const diamond = await DiamondPrice.findByIdAndUpdate(req.params.id, updateData, {
       returnDocument: "after",
@@ -343,7 +373,15 @@ const deleteDiamondPrice = async (req, res) => {
 
     // Delete Cloudinary assets in parallel
     const deletePromises = [];
-    if (diamond.image) deletePromises.push(deleteFromCloudinary(diamond.image));
+    if (diamond.image) {
+      if (Array.isArray(diamond.image)) {
+        diamond.image.forEach(img => {
+          if (img) deletePromises.push(deleteFromCloudinary(img));
+        });
+      } else {
+        deletePromises.push(deleteFromCloudinary(diamond.image));
+      }
+    }
     if (diamond.certificate) deletePromises.push(deleteFromCloudinary(diamond.certificate));
     if (deletePromises.length > 0) await Promise.all(deletePromises);
 

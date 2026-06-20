@@ -1182,6 +1182,85 @@ const getRelatedProducts = async (req, res) => {
   }
 };
 
+/**
+ * Global Search for both Products and Diamonds
+ */
+const globalSearch = async (req, res) => {
+  try {
+    const { q, search } = req.query;
+    const query = (q || search || "").trim();
+
+    if (!query) {
+      return res.status(200).json(
+        new ApiResponse(200, { products: [], diamonds: [] }, "Search query is empty")
+      );
+    }
+
+    const cleanedQuery = query.replace(/\bdiamonds?\b/gi, "").trim();
+    const escapedSearch = escapeRegex(cleanedQuery || query);
+    const searchRegex = new RegExp(escapedSearch, "i");
+
+    // Product search filters: search in title, sku, description, subCategory, keywords
+    const productFilter = {
+      isDeleted: false,
+      isActive: true,
+      $or: [
+        { title: searchRegex },
+        { sku: searchRegex },
+        { description: searchRegex },
+        { subCategory: searchRegex },
+        { keywords: searchRegex }
+      ]
+    };
+
+    // DiamondPrice search filters
+    const isJustDiamondSearch = /^\s*diamonds?\s*$/i.test(query);
+
+    const diamondFilter = {
+      isActive: true,
+      isSoldOut: false,
+    };
+
+    if (isJustDiamondSearch) {
+      // Just search active diamonds, no specific text filters needed
+    } else {
+      diamondFilter.$or = [
+        { sku: searchRegex },
+        { diamondType: searchRegex },
+        { shape: searchRegex },
+        { clarity: searchRegex },
+        { color: searchRegex }
+      ];
+
+      // Extract numeric carat value (e.g., "1.5 carat", "2 ct", "1")
+      const numberMatch = query.match(/(\d+(?:\.\d+)?)/);
+      if (numberMatch) {
+        const caratValue = parseFloat(numberMatch[1]);
+        if (!isNaN(caratValue)) {
+          diamondFilter.$or.push({ carat: caratValue });
+        }
+      }
+    }
+
+    // Perform queries in parallel
+    const [products, diamonds] = await Promise.all([
+      Product.find(productFilter)
+        .populate("category", "name")
+        .limit(20)
+        .lean(),
+      DiamondPrice.find(diamondFilter)
+        .limit(20)
+        .lean()
+    ]);
+
+    res.status(200).json(
+      new ApiResponse(200, { products, diamonds }, "Global search results fetched successfully")
+    );
+  } catch (error) {
+    res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));
+  }
+};
+
 module.exports = {
   createProduct,
   getAllProducts,
@@ -1190,5 +1269,7 @@ module.exports = {
   deleteProduct,
   bulkCreateProducts,
   getRelatedProducts,
+  globalSearch,
 };
+
 

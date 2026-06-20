@@ -53,7 +53,7 @@ const diamondPriceSchema = new mongoose.Schema(
       default: false,
     },
     image: {
-      type: String,
+      type: [String],
     },
     certificate: {
       type: String,

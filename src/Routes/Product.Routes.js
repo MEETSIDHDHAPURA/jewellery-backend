@@ -39,6 +39,7 @@ router.post("/bulk", auth, productController.bulkCreateProducts);
 
 router.get("/", productController.getAllProducts);
 router.get("/all", productController.getAllProducts);
+router.get("/search", productController.globalSearch);
 
 router.get("/related/:id", productController.getRelatedProducts);
 

@@ -128,7 +128,6 @@ const forgotPassword = async (req, res) => {
         `;
 
     try {
-      console.log("test")
       await sendMail(user.email, "Password Reset Request", message);
       res.status(200).json(new ApiResponse(200, {}, "Reset email sent successfully"));
     } catch (error) {
