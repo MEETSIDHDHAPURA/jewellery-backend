@@ -151,6 +151,39 @@ const setMargin = async (req, res) => {
   }
 };
 
+// Get Currency Rates
+const getCurrencyRates = async (req, res) => {
+  try {
+    const config = await GlobalConfig.findOne({ key: "currency_rates" });
+    const rates = config ? config.value : { INR: 83.5, CAD: 1.36 };
+    res.status(200).json(new ApiResponse(200, rates, "Currency rates fetched successfully"));
+  } catch (error) {
+    res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));
+  }
+};
+
+// Set Currency Rates
+const setCurrencyRates = async (req, res) => {
+  try {
+    const { INR, CAD } = req.body;
+    if (INR === undefined || CAD === undefined) {
+      throw new ApiError(400, "INR and CAD rates are required");
+    }
+
+    const config = await GlobalConfig.findOneAndUpdate(
+      { key: "currency_rates" },
+      { key: "currency_rates", value: { INR: Number(INR), CAD: Number(CAD) } },
+      { upsert: true, returnDocument: "after" }
+    );
+
+    await logActivity(req, "Update", `Update currency rates: INR to ${INR}, CAD to ${CAD}`);
+
+    res.status(200).json(new ApiResponse(200, config.value, "Currency rates updated successfully"));
+  } catch (error) {
+    res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));
+  }
+};
+
 module.exports = {
   createMakingCharge,
   getMakingCharges,
@@ -159,4 +192,7 @@ module.exports = {
   deleteMakingCharge,
   getMargin,
   setMargin,
+  getCurrencyRates,
+  setCurrencyRates,
 };
+
