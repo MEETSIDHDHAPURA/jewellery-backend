@@ -74,7 +74,6 @@ const couponSchema = new mongoose.Schema(
     applicableCategories: [
       {
         type: mongoose.Schema.Types.Mixed,
-        ref: "Category",
       },
     ],
 

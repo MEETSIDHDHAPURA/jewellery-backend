@@ -637,4 +637,5 @@ module.exports = {
   clearCart,
   applyCoupon,
   removeCoupon,
+  recalculateCartDiscount,
 };

@@ -3,6 +3,53 @@ const CouponUsage = require("../Models/CouponUsage.Model");
 const ApiResponse = require("../Utils/ApiResponse");
 const ApiError = require("../Utils/ApiError");
 const logActivity = require("../Utils/logActivity");
+const mongoose = require("mongoose");
+const Category = require("../Models/Category.Model");
+
+// Helper to manually populate applicableCategories (supporting mixed ObjectId and custom strings like 'diamond')
+const populateCouponCategories = async (coupons) => {
+  if (!coupons) return coupons;
+
+  const isArray = Array.isArray(coupons);
+  const list = isArray ? coupons : [coupons];
+
+  // Collect all category IDs that are valid ObjectIds
+  const categoryIds = [];
+  list.forEach((c) => {
+    if (c.applicableCategories && Array.isArray(c.applicableCategories)) {
+      c.applicableCategories.forEach((cat) => {
+        const idStr = cat?._id ? cat._id.toString() : cat?.toString();
+        if (mongoose.Types.ObjectId.isValid(idStr)) {
+          categoryIds.push(idStr);
+        }
+      });
+    }
+  });
+
+  // Fetch category documents
+  const categories = categoryIds.length > 0
+    ? await Category.find({ _id: { $in: categoryIds } }).lean()
+    : [];
+  const categoryMap = new Map(categories.map((cat) => [cat._id.toString(), cat]));
+
+  // Map back to the coupons
+  list.forEach((c) => {
+    if (c.applicableCategories && Array.isArray(c.applicableCategories)) {
+      c.applicableCategories = c.applicableCategories.map((cat) => {
+        const idStr = cat?._id ? cat._id.toString() : cat?.toString();
+        if (categoryMap.has(idStr)) {
+          return categoryMap.get(idStr);
+        }
+        if (idStr === "diamond") {
+          return { _id: "diamond", name: "Diamond" };
+        }
+        return cat; // keep original if not found
+      });
+    }
+  });
+
+  return isArray ? list : list[0];
+};
 
 // ─── Create Coupon ───
 const createCoupon = async (req, res) => {
@@ -119,7 +166,8 @@ const updateCoupon = async (req, res) => {
       : `Update coupon: ${coupon.code}`;
     await logActivity(req, "Update", action);
 
-    const populated = await Coupon.findById(coupon._id).populate("applicableCategories");
+    const couponDoc = await Coupon.findById(coupon._id).lean();
+    const populated = await populateCouponCategories(couponDoc);
     res.status(200).json(new ApiResponse(200, populated, "Coupon updated successfully"));
   } catch (error) {
     res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));
@@ -147,8 +195,9 @@ const getCouponById = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const coupon = await Coupon.findById(id).populate("applicableCategories");
-    if (!coupon) throw new ApiError(404, "Coupon not found");
+    const couponDoc = await Coupon.findById(id).lean();
+    if (!couponDoc) throw new ApiError(404, "Coupon not found");
+    const coupon = await populateCouponCategories(couponDoc);
 
     res.status(200).json(new ApiResponse(200, coupon, "Coupon fetched successfully"));
   } catch (error) {
@@ -192,9 +241,10 @@ const getAllCoupons = async (req, res) => {
       filter.eligibility = eligibility;
     }
 
-    const coupons = await Coupon.find(filter)
-      .populate("applicableCategories")
-      .sort({ createdAt: -1 });
+    const couponDocs = await Coupon.find(filter)
+      .sort({ createdAt: -1 })
+      .lean();
+    const coupons = await populateCouponCategories(couponDocs);
 
     res.status(200).json(new ApiResponse(200, coupons, "Coupons fetched successfully"));
   } catch (error) {
@@ -363,8 +413,9 @@ const getCouponReport = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const coupon = await Coupon.findById(id).populate("applicableCategories");
-    if (!coupon) throw new ApiError(404, "Coupon not found");
+    const couponDoc = await Coupon.findById(id).lean();
+    if (!couponDoc) throw new ApiError(404, "Coupon not found");
+    const coupon = await populateCouponCategories(couponDoc);
 
     // Aggregate usage data
     const usageStats = await CouponUsage.aggregate([
