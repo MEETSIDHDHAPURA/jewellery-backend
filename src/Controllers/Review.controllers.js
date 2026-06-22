@@ -66,11 +66,50 @@ const createReview = async (req, res) => {
 const getProductReviews = async (req, res) => {
   try {
     const { productId } = req.params;
-    const reviews = await Review.find({ product: productId, isVisible: true })
-      .populate("user", "name avatar")
-      .sort({ createdAt: -1 });
 
-    res.status(200).json(new ApiResponse(200, reviews, "Reviews fetched successfully"));
+    const filter = { product: productId, isVisible: true };
+    if (req.query.rating) {
+      filter.rating = Number(req.query.rating);
+    }
+
+    let sort = { createdAt: -1 };
+    if (req.query.sortBy === 'highest') {
+      sort = { rating: -1, createdAt: -1 };
+    } else if (req.query.sortBy === 'lowest') {
+      sort = { rating: 1, createdAt: -1 };
+    }
+
+    if (req.query.page) {
+      const page = parseInt(req.query.page) || 1;
+      const limit = parseInt(req.query.limit) || 30;
+      const skip = (page - 1) * limit;
+
+      const reviews = await Review.find(filter)
+        .populate("user", "name avatar")
+        .sort(sort)
+        .skip(skip)
+        .limit(limit);
+
+      const totalReviews = await Review.countDocuments(filter);
+
+      return res.status(200).json(new ApiResponse(200, {
+        reviews,
+        pagination: {
+          totalReviews,
+          page,
+          limit,
+          totalPages: Math.ceil(totalReviews / limit),
+          hasMore: page * limit < totalReviews
+        }
+      }, "Reviews fetched successfully"));
+    } else {
+      // Backwards compatibility for non-paginated queries (e.g. initial server-side page render)
+      const reviews = await Review.find(filter)
+        .populate("user", "name avatar")
+        .sort(sort);
+
+      return res.status(200).json(new ApiResponse(200, reviews, "Reviews fetched successfully"));
+    }
   } catch (error) {
     res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));
   }

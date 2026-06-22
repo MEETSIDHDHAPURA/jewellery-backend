@@ -589,20 +589,27 @@ const getAllProducts = async (req, res) => {
  */
 const getProductById = async (req, res) => {
   try {
-    // Validate ObjectId to avoid unnecessary DB call
     const productId = req.params.id;
-    if (!mongoose.Types.ObjectId.isValid(productId)) {
-      throw new ApiError(400, "Invalid product ID");
-    }
+    let product;
 
-    const product = await Product.findById(productId)
-      .select("-isDeleted")
-      .populate("category")
-      .populate({
-        path: "variants",
-        match: { isActive: true }
-      })
-      .lean();
+    if (mongoose.Types.ObjectId.isValid(productId)) {
+      product = await Product.findById(productId)
+        .select("-isDeleted")
+        .populate("category")
+        .populate({
+          path: "variants",
+          match: { isActive: true }
+        })
+        .lean();
+    } else {
+      product = await Product.findOne({ slug: productId, isDeleted: { $ne: true } })
+        .populate("category")
+        .populate({
+          path: "variants",
+          match: { isActive: true }
+        })
+        .lean();
+    }
 
     if (!product || product.isDeleted) {
       throw new ApiError(404, "Product not found");

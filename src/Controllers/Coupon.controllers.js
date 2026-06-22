@@ -322,7 +322,7 @@ const validateCoupon = async (req, res) => {
     }
 
     // 7. Check applicable categories
-    if (coupon.applicableCategories && coupon.applicableCategories.length > 0) {
+    if (coupon.applicableCategories && coupon.applicableCategories.length > 0 && !coupon.applicableCategories.includes("all")) {
       const applicableCatStrings = coupon.applicableCategories.map((c) => c.toString());
       let hasMatchingCategory = false;
 
@@ -333,7 +333,7 @@ const validateCoupon = async (req, res) => {
       }
 
       if (!hasMatchingCategory && applicableCatStrings.includes("diamond")) {
-        if (coupon.applicableShapes && coupon.applicableShapes.length > 0) {
+        if (coupon.applicableShapes && coupon.applicableShapes.length > 0 && !coupon.applicableShapes.includes("all")) {
           if (cartDiamondShapes && cartDiamondShapes.length > 0) {
             hasMatchingCategory = cartDiamondShapes.some((shape) =>
               coupon.applicableShapes.includes(shape)
@@ -370,8 +370,9 @@ const validateCoupon = async (req, res) => {
         throw new ApiError(400, `This coupon is not available in your country (only valid for ${coupon.country})`);
       }
 
-      if (coupon.country.toUpperCase() === "USA" && coupon.province) {
-        if (!finalProvince || finalProvince.toLowerCase() !== coupon.province.toLowerCase()) {
+      if (coupon.country.toUpperCase() === "USA" && coupon.province && coupon.province.toLowerCase() !== "all") {
+        const allowedProvinces = coupon.province.split(",").map(p => p.trim().toLowerCase());
+        if (!finalProvince || !allowedProvinces.includes(finalProvince.toLowerCase())) {
           throw new ApiError(400, `This coupon is not available in your state (only valid for ${coupon.province})`);
         }
       }

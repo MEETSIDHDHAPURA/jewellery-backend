@@ -98,8 +98,9 @@ const recalculateCartDiscount = async (cart) => {
       return cart;
     }
 
-    if (coupon.country.toUpperCase() === "USA" && coupon.province) {
-      if (!finalProvince || finalProvince.toLowerCase() !== coupon.province.toLowerCase()) {
+    if (coupon.country.toUpperCase() === "USA" && coupon.province && coupon.province.toLowerCase() !== "all") {
+      const allowedProvinces = coupon.province.split(",").map(p => p.trim().toLowerCase());
+      if (!finalProvince || !allowedProvinces.includes(finalProvince.toLowerCase())) {
         cart.couponCode = null;
         cart.discountAmount = 0;
         cart.discountType = null;
@@ -162,14 +163,14 @@ const recalculateCartDiscount = async (cart) => {
   let applicableItems = cart.items;
 
   // Category restriction: filter items to only those in applicable categories
-  if (coupon.applicableCategories && coupon.applicableCategories.length > 0) {
+  if (coupon.applicableCategories && coupon.applicableCategories.length > 0 && !coupon.applicableCategories.includes("all")) {
     const applicableCatStrings = coupon.applicableCategories.map((c) => c.toString());
 
     applicableItems = cart.items.filter((item) => {
       const isItemLooseDiamond = item.metal === "—" || item.diamond || item.shape;
       if (isItemLooseDiamond) {
         if (applicableCatStrings.includes("diamond")) {
-          if (coupon.applicableShapes && coupon.applicableShapes.length > 0) {
+          if (coupon.applicableShapes && coupon.applicableShapes.length > 0 && !coupon.applicableShapes.includes("all")) {
             const diamondShape = item.diamond ? item.diamond.shape : (item.shape || item.product);
             return diamondShape && coupon.applicableShapes.includes(diamondShape);
           }
@@ -539,13 +540,13 @@ const applyCoupon = async (req, res) => {
     }
 
     // 8. Check applicable categories
-    if (coupon.applicableCategories && coupon.applicableCategories.length > 0) {
+    if (coupon.applicableCategories && coupon.applicableCategories.length > 0 && !coupon.applicableCategories.includes("all")) {
       const applicableCatStrings = coupon.applicableCategories.map((c) => c.toString());
       const hasMatchingCategory = cart.items.some((item) => {
         const isItemLooseDiamond = item.metal === "—" || item.diamond || item.shape;
         if (isItemLooseDiamond) {
           if (applicableCatStrings.includes("diamond")) {
-            if (coupon.applicableShapes && coupon.applicableShapes.length > 0) {
+            if (coupon.applicableShapes && coupon.applicableShapes.length > 0 && !coupon.applicableShapes.includes("all")) {
               const diamondShape = item.diamond ? item.diamond.shape : (item.shape || item.product);
               return diamondShape && coupon.applicableShapes.includes(diamondShape);
             }
@@ -581,8 +582,9 @@ const applyCoupon = async (req, res) => {
         throw new ApiError(400, `This coupon is not available in your country (only valid for ${coupon.country})`);
       }
 
-      if (coupon.country.toUpperCase() === "USA" && coupon.province) {
-        if (!finalProvince || finalProvince.toLowerCase() !== coupon.province.toLowerCase()) {
+      if (coupon.country.toUpperCase() === "USA" && coupon.province && coupon.province.toLowerCase() !== "all") {
+        const allowedProvinces = coupon.province.split(",").map(p => p.trim().toLowerCase());
+        if (!finalProvince || !allowedProvinces.includes(finalProvince.toLowerCase())) {
           throw new ApiError(400, `This coupon is not available in your state (only valid for ${coupon.province})`);
         }
       }
