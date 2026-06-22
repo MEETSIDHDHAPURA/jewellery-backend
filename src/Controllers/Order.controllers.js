@@ -1,6 +1,7 @@
 const Order = require("../Models/Order.Model");
 const Coupon = require("../Models/Coupon.Model");
 const CouponUsage = require("../Models/CouponUsage.Model");
+const DiamondPrice = require("../Models/DiamondPrice.Model");
 const ApiResponse = require("../Utils/ApiResponse");
 const ApiError = require("../Utils/ApiError");
 const logActivity = require("../Utils/logActivity");
@@ -20,7 +21,7 @@ const createOrder = async (req, res) => {
       const DD = String(date.getDate()).padStart(2, "0");
       const MM = String(date.getMonth() + 1).padStart(2, "0");
       const YY = String(date.getFullYear()).slice(-2);
-      
+
       let isUnique = false;
       let newOrderId = "";
       while (!isUnique) {
@@ -46,6 +47,34 @@ const createOrder = async (req, res) => {
       couponCode,
       shippingAddress,
     });
+
+    // ─── Manage Diamond Stock ───
+    for (const item of items) {
+      if (item.diamond) {
+        await DiamondPrice.findByIdAndUpdate(
+          item.diamond,
+          [
+            {
+              $set: {
+                stock: { $subtract: ["$stock", item.quantity || 1] }
+              }
+            },
+            {
+              $set: {
+                isSoldOut: {
+                  $cond: {
+                    if: { $lte: ["$stock", 0] },
+                    then: true,
+                    else: false
+                  }
+                }
+              }
+            }
+          ],
+          { returnDocument: "after", updatePipeline: true }
+        );
+      }
+    }
 
     // ─── Coupon Usage Logging ───
     if (couponCode) {

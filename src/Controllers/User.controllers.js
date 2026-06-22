@@ -80,6 +80,10 @@ const loginUser = async (req, res) => {
       throw new ApiError(404, "User not found");
     }
 
+    if (user.isActive === false) {
+      throw new ApiError(403, "Your account is inactive or suspended");
+    }
+
     if (user.isVerified === false && user.role !== "admin" && user.role !== "SuperAdmin") {
       throw new ApiError(403, "Please verify your email first");
     }
@@ -184,7 +188,7 @@ const getUserProfile = async (req, res) => {
 const updateUserProfile = async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, phone, addresses } = req.body;
+    const { name, phone, addresses, isActive, role } = req.body;
 
     const user = await User.findById(id);
     if (!user) throw new ApiError(404, "User not found");
@@ -192,6 +196,8 @@ const updateUserProfile = async (req, res) => {
     if (name) user.name = name;
     if (phone) user.phone = phone;
     if (addresses) user.addresses = addresses;
+    if (isActive !== undefined) user.isActive = isActive;
+    if (role !== undefined) user.role = role;
 
     // Handle avatar update if a file is uploaded
     if (req.file) {
@@ -239,10 +245,10 @@ const updatePassword = async (req, res) => {
   }
 };
 
-// Get All Users (Admin View - Excludes Admins)
+// Get All Users (Admin View)
 const getAllUsers = async (req, res) => {
   try {
-    const users = await User.find({ role: "user", isDeleted: false })
+    const users = await User.find({ isDeleted: false })
       .select("-password")
       .sort({ createdAt: -1 });
     res.status(200).json(new ApiResponse(200, users, "Users fetched successfully"));
