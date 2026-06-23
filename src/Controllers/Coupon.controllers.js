@@ -70,6 +70,9 @@ const createCoupon = async (req, res) => {
       applicableShapes,
       country,
       province,
+      isExitIntent,
+      sendOnRegistration,
+      registrationDelay,
     } = req.body;
 
     if (!code || !discountType || discountValue === undefined || !expiryDate) {
@@ -95,6 +98,9 @@ const createCoupon = async (req, res) => {
       applicableShapes: applicableCategories?.includes("diamond") ? applicableShapes || [] : [],
       country: country || "all",
       province: country === "USA" ? province || "" : "",
+      isExitIntent: isExitIntent || false,
+      sendOnRegistration: sendOnRegistration || false,
+      registrationDelay: registrationDelay || 0,
     });
 
     await logActivity(req, "Create", `create coupon ${coupon.code}`);
@@ -131,6 +137,9 @@ const updateCoupon = async (req, res) => {
       "isActive",
       "country",
       "province",
+      "isExitIntent",
+      "sendOnRegistration",
+      "registrationDelay",
     ];
 
     const originalCode = coupon.code;
@@ -468,6 +477,31 @@ const getCouponReport = async (req, res) => {
   }
 };
 
+// ─── Get Public Exit Intent Coupon ───
+const getPublicExitIntentCoupon = async (req, res) => {
+  try {
+    const now = new Date();
+    const coupon = await Coupon.findOne({
+      isActive: true,
+      isExitIntent: true,
+      startDate: { $lte: now },
+      expiryDate: { $gte: now }
+    }).sort({ createdAt: -1 }).lean();
+
+    if (!coupon) {
+      return res.status(200).json(new ApiResponse(200, null, "No active exit intent coupon found"));
+    }
+
+    if (coupon.usedCount >= coupon.usageLimit) {
+      return res.status(200).json(new ApiResponse(200, null, "No active exit intent coupon found"));
+    }
+
+    res.status(200).json(new ApiResponse(200, coupon, "Active exit intent coupon fetched successfully"));
+  } catch (error) {
+    res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));
+  }
+};
+
 module.exports = {
   createCoupon,
   updateCoupon,
@@ -477,4 +511,5 @@ module.exports = {
   toggleCouponStatus,
   validateCoupon,
   getCouponReport,
+  getPublicExitIntentCoupon,
 };

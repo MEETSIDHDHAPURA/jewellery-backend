@@ -8,30 +8,74 @@ const MakingCharge = require("../Models/MakingCharge.Model");
 const PricingModifier = require("../Models/PricingModifier.Model");
 const GlobalConfig = require("../Models/GlobalConfig.Model");
 const DiamondPrice = require("../Models/DiamondPrice.Model");
+const ProductVariant = require("../Models/ProductVariant.Model");
 
 /**
  * Generates SKU for a jewellery product variant
  */
 const generateSKU = (productTitle, metal, purity, size) => {
-  const prefix = productTitle.substring(0, 3).toUpperCase();
-  const metalCode = metal.substring(0, 2).toUpperCase();
-  const purityCode = purity.toString().toUpperCase();
-  const sizeCode = size ? size.toString().toUpperCase() : "NA";
+  const prefix = productTitle.replace(/[^a-zA-Z0-9]/g, "").substring(0, 3).toUpperCase() || "VAR";
+  const metalCode = metal.replace(/[^a-zA-Z0-9]/g, "").substring(0, 2).toUpperCase() || "MT";
+  const purityCode = purity.toString().replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
+  const sizeCode = size ? size.toString().replace(/[^a-zA-Z0-9.]/g, "").toUpperCase() : "NA";
   const random = Math.floor(1000 + Math.random() * 9000);
   return `${prefix}-${metalCode}${purityCode}-${sizeCode}-${random}`;
+};
+/**
+ * Normalizes a metal string to match schema enum values
+ */
+const normalizeMetalName = (metalStr) => {
+  if (!metalStr) return "";
+  const m = String(metalStr).trim().toLowerCase();
+  if (m.includes("white")) return "White Gold";
+  if (m.includes("yellow")) return "Yellow Gold";
+  if (m.includes("rose")) return "Rose Gold";
+  if (m.includes("platinum")) return "Platinum";
+  if (m.includes("silver")) return "Silver";
+  if (m.includes("gold")) return "Yellow Gold";
+  return metalStr;
 };
 
 /**
  * Generates all possible variant combinations
  */
-const generateVariantCombinations = (productId, productTitle, config) => {
+const generateVariantCombinations = async (productId, productTitle, config) => {
   const { metals, purities, sizes, sizeType, baseWeight, basePrice } = config;
   const variants = [];
+  const generatedBatchSkus = new Set();
+  const cleanMetals = (metals || []).map(normalizeMetalName);
 
-  for (const metal of metals) {
+  const generateUniqueSKU = async (metal, purity, sizeValue) => {
+    const prefix = productTitle.replace(/[^a-zA-Z0-9]/g, "").substring(0, 3).toUpperCase() || "VAR";
+    const metalCode = metal.replace(/[^a-zA-Z0-9]/g, "").substring(0, 2).toUpperCase() || "MT";
+    const purityCode = purity.toString().replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
+    const sizeCode = sizeValue ? sizeValue.toString().replace(/[^a-zA-Z0-9.]/g, "").toUpperCase() : "NA";
+
+    let unique = false;
+    let sku = "";
+    let attempts = 0;
+
+    while (!unique && attempts < 50) {
+      const random = Math.floor(1000 + Math.random() * 9000);
+      sku = `${prefix}-${metalCode}${purityCode}-${sizeCode}-${random}`;
+
+      if (!generatedBatchSkus.has(sku)) {
+        const exists = await ProductVariant.exists({ sku });
+        if (!exists) {
+          unique = true;
+          generatedBatchSkus.add(sku);
+        }
+      }
+      attempts++;
+    }
+    return sku;
+  };
+
+  for (const metal of cleanMetals) {
     for (const purity of purities) {
       if (sizes && sizes.length > 0) {
         for (const sizeValue of sizes) {
+          const sku = await generateUniqueSKU(metal, purity, sizeValue);
           variants.push({
             productId,
             metal,
@@ -40,11 +84,12 @@ const generateVariantCombinations = (productId, productTitle, config) => {
             sizeValue: sizeValue.toString(),
             weight: baseWeight || 0,
             basePrice: basePrice || 0,
-            sku: generateSKU(productTitle, metal, purity, sizeValue),
+            sku,
             stock: 0,
           });
         }
       } else {
+        const sku = await generateUniqueSKU(metal, purity, "NA");
         variants.push({
           productId,
           metal,
@@ -52,7 +97,7 @@ const generateVariantCombinations = (productId, productTitle, config) => {
           sizeType: "none",
           weight: baseWeight || 0,
           basePrice: basePrice || 0,
-          sku: generateSKU(productTitle, metal, purity, "NA"),
+          sku,
           stock: 0,
         });
       }
@@ -65,7 +110,7 @@ const calculatePrice = (variant, diamond, metalRate, makingCharge, makingChargeT
   const metalCost = (variant?.weight || 0) * (metalRate || 0);
   const makingCost = (variant?.weight || 0) * (makingCharge || 0);
   const diamondCost = (diamond?.additionalPrice || 0);
-  
+
   const subTotal = metalCost + makingCost + diamondCost;
   const gstAmount = subTotal * ((gst || 3) / 100);
   const finalPrice = subTotal + gstAmount;
@@ -108,7 +153,7 @@ const recalculateAndSavePrices = async (filterMetals = null) => {
     const products = await Product.find(query);
 
     // 3. Filter products if filterMetals is specified
-    const affectedProducts = filterMetals 
+    const affectedProducts = filterMetals
       ? products.filter(p => filterMetals.includes(getProductMetalType(p)))
       : products;
 
@@ -290,4 +335,5 @@ module.exports = {
   calculatePrice,
   getProductMetalType,
   recalculateAndSavePrices,
+  normalizeMetalName,
 };

@@ -7,6 +7,11 @@ const PORT = process.env.PORT || 3000;
 const startServer = async () => {
   try {
     await connectDB();
+    
+    // Start background worker for welcome coupon email dispatch
+    const startDelayedCouponWorker = require("./Utils/delayedCouponWorker");
+    startDelayedCouponWorker();
+
     app.listen(PORT, () => {
       console.log(`Server is running at ${PORT}`);
     });

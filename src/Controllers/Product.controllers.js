@@ -10,7 +10,7 @@ const mongoose = require("mongoose");
 const ApiResponse = require("../Utils/ApiResponse");
 const ApiError = require("../Utils/ApiError");
 const { uploadOnCloudinary, updateOnCloudinary } = require("../Utils/Cloudinary");
-const { generateVariantCombinations } = require("../Utils/Product.utils");
+const { generateVariantCombinations, normalizeMetalName } = require("../Utils/Product.utils");
 const fs = require("fs");
 const { clearLandingPageCache } = require("./LandingPage.controllers");
 const logActivity = require("../Utils/logActivity");
@@ -317,7 +317,7 @@ const createProduct = async (req, res) => {
       weight22K: parseNumber(weight22K, 0),
       weightSilver: parseNumber(weightSilver, 0),
       weightPlatinum: parseNumber(weightPlatinum, 0),
-      allowedMetals: safeParseJSON(allowedMetals, []),
+      allowedMetals: safeParseJSON(allowedMetals, []).map(normalizeMetalName),
       allowedCarats: safeParseJSON(allowedCarats, []),
       allowedClarities: safeParseJSON(allowedClarities, []),
       allowedColors: safeParseJSON(allowedColors, []),
@@ -337,7 +337,7 @@ const createProduct = async (req, res) => {
     // 2. Generate and Create Variants if config is provided
     if (variantConfig) {
       const config = typeof variantConfig === "string" ? JSON.parse(variantConfig) : variantConfig;
-      const variantData = generateVariantCombinations(product._id, title, config);
+      const variantData = await generateVariantCombinations(product._id, title, config);
 
       const createdVariants = await ProductVariant.insertMany(variantData);
 
@@ -734,7 +734,11 @@ const updateProduct = async (req, res) => {
     // Process all keys in req.body
     for (const key of Object.keys(rawBody)) {
       if (jsonFields.has(key)) {
-        updateData[key] = safeParseJSON(rawBody[key], []);
+        let parsed = safeParseJSON(rawBody[key], []);
+        if (key === "allowedMetals" && Array.isArray(parsed)) {
+          parsed = parsed.map(normalizeMetalName);
+        }
+        updateData[key] = parsed;
       } else if (numberFields.has(key)) {
         updateData[key] = parseNumber(rawBody[key], 0);
       } else if (booleanFields.has(key)) {
@@ -943,18 +947,36 @@ const bulkCreateProducts = async (req, res) => {
       return [];
     };
 
+    // Helper to search keys case-insensitively and ignore spaces/special characters
+    const getField = (obj, ...keys) => {
+      if (!obj) return undefined;
+      for (const k of keys) {
+        if (obj[k] !== undefined) return obj[k];
+      }
+      const lowerKeys = keys.map(k => k.toLowerCase().replace(/[^a-z0-9]/g, ''));
+      for (const key of Object.keys(obj)) {
+        const normalizedKey = key.toLowerCase().replace(/[^a-z0-9]/g, '');
+        if (lowerKeys.includes(normalizedKey)) {
+          return obj[key];
+        }
+      }
+      return undefined;
+    };
+
     // 1. Validation & Category Lookup Phase
     for (let i = 0; i < products.length; i++) {
       const pData = products[i];
       const rowNum = i + 1;
 
       try {
-        const { title, description, category } = pData;
+        const title = getField(pData, "title", "Title");
+        const description = getField(pData, "description", "Description");
+        const category = getField(pData, "category", "Category");
 
-        if (!title || !title.trim()) {
+        if (!title || !String(title).trim()) {
           throw new Error(`Row ${rowNum}: Title is required`);
         }
-        if (!description || !description.trim()) {
+        if (!description || !String(description).trim()) {
           throw new Error(`Row ${rowNum}: Description is required`);
         }
         if (!category) {
@@ -963,12 +985,14 @@ const bulkCreateProducts = async (req, res) => {
 
         // Look up category
         let categoryId = null;
+        let categoryName = String(category);
         const cacheKey = String(category).trim().toLowerCase();
         if (categoryCache[cacheKey]) {
-          categoryId = categoryCache[cacheKey];
+          categoryId = categoryCache[cacheKey].id;
+          categoryName = categoryCache[cacheKey].name;
         } else {
           // Single query: try ObjectId match OR name match together
-          const escapedCat = escapeRegex(category.trim());
+          const escapedCat = escapeRegex(String(category).trim());
           const orConditions = [{ name: { $regex: new RegExp(`^${escapedCat}$`, "i") } }];
           if (mongoose.Types.ObjectId.isValid(category)) {
             orConditions.unshift({ _id: new mongoose.Types.ObjectId(category) });
@@ -976,19 +1000,21 @@ const bulkCreateProducts = async (req, res) => {
           const cat = await Category.findOne({ $or: orConditions }).lean();
           if (cat) {
             categoryId = cat._id;
+            categoryName = cat.name;
           }
 
           if (!categoryId) {
             throw new Error(`Row ${rowNum}: Category '${category}' not found.`);
           }
-          categoryCache[cacheKey] = categoryId;
+          categoryCache[cacheKey] = { id: categoryId, name: categoryName };
         }
 
         // Store pre-validated info along with original row data
         validatedProducts.push({
           pData,
           rowNum,
-          categoryId
+          categoryId,
+          categoryName
         });
       } catch (err) {
         errors.push({ row: rowNum, error: err.message });
@@ -1003,21 +1029,55 @@ const bulkCreateProducts = async (req, res) => {
     const createdProducts = [];
 
     for (const item of validatedProducts) {
-      const { pData, categoryId } = item;
-      const {
-        title, description, subCategory,
-        Price, makingCharge, makingChargeType,
-        occasion, gender, isFeatured, isActive, isSoldOut,
-        basePrice, silverBasePrice, weight,
-        weight10K, weight14K, weight18K, weight22K, weightSilver, weightPlatinum,
-        allowedMetals, allowedCarats, allowedClarities, allowedColors, allowedSizes,
-        metaTitle, metaDescription, keywords, certificate,
-        diamondType, diamondShape,
-        metalImages_yellowGold, metalImages_whiteGold, metalImages_roseGold, metalImages_silver, metalImages_platinum
-      } = pData;
+      const { pData, categoryId, categoryName } = item;
+      
+      const title = getField(pData, "title", "Title") || "";
+      const description = getField(pData, "description", "Description") || "";
+      const subCategory = getField(pData, "subCategory", "sub category", "SubCategory", "Sub Category") || "";
+      const Price = getField(pData, "Price", "price", "Price") || 0;
+      const makingCharge = getField(pData, "makingCharge", "making charge", "Making Charge") || 0;
+      const makingChargeType = getField(pData, "makingChargeType", "making charge type", "Making Charge Type") || "per_gram";
+      const occasion = getField(pData, "occasion", "Occasion") || "";
+      const gender = getField(pData, "gender", "Gender") || "Women";
+      const isFeatured = getField(pData, "isFeatured", "is featured", "Featured", "Is Featured") || false;
+      const isActive = getField(pData, "isActive", "is active", "Active", "Is Active") || true;
+      const isSoldOut = getField(pData, "isSoldOut", "is sold out", "Sold Out", "Is Sold Out") || false;
+      const basePrice = getField(pData, "basePrice", "base price", "Base Price") || 0;
+      const silverBasePrice = getField(pData, "silverBasePrice", "silver base price", "Silver Base Price") || 0;
+      const weight = getField(pData, "weight", "Weight") || 0;
+      const weight10K = getField(pData, "weight10K", "weight 10K", "Weight 10K") || 0;
+      const weight14K = getField(pData, "weight14K", "weight 14K", "Weight 14K") || 0;
+      const weight18K = getField(pData, "weight18K", "weight 18K", "Weight 18K") || 0;
+      const weight22K = getField(pData, "weight22K", "weight 22K", "Weight 22K") || 0;
+      const weightSilver = getField(pData, "weightSilver", "weight silver", "Weight Silver") || 0;
+      const weightPlatinum = getField(pData, "weightPlatinum", "weight platinum", "Weight Platinum") || 0;
+      const allowedMetals = getField(pData, "allowedMetals", "allowed metals", "Allowed Metals") || "";
+      const allowedCarats = getField(pData, "allowedCarats", "allowed carats", "Allowed Carats") || "";
+      const allowedClarities = getField(pData, "allowedClarities", "allowed clarities", "Allowed Clarities") || "";
+      const allowedColors = getField(pData, "allowedColors", "allowed colors", "Allowed Colors") || "";
+      const allowedSizes = getField(pData, "allowedSizes", "allowed sizes", "Allowed Sizes") || "";
+      const metaTitle = getField(pData, "metaTitle", "meta title", "Meta Title") || "";
+      const metaDescription = getField(pData, "metaDescription", "meta description", "Meta Description") || "";
+      const keywords = getField(pData, "keywords", "Keywords") || "";
+      const certificate = getField(pData, "certificate", "Certificate") || "";
+      
+      const diamondType = getField(pData, "diamondType", "diamond type", "Diamond Type", "Diaomd Type") || "";
+      const diamondShape = getField(pData, "diamondShape", "diamond shape", "Diamond Shape", "shape", "Shape", "shap", "Shap") || "";
+      const diamondCaratRaw = getField(pData, "diamondCarat", "diamond carat", "Diamond Carat", "diamond CARAT", "carat", "Carat") || "";
+      const diamondColorRaw = getField(pData, "diamondColor", "color", "Color", "allowedColors") || "";
+      const diamondClarityRaw = getField(pData, "diamondClarity", "clarity", "Clarity", "allowedClarities") || "";
 
-      // Generate unique slug (use select + lean for faster check)
-      let finalSlug = title
+      const settingType = getField(pData, "settingType", "setting type", "Setting Type") || "";
+      const backingType = getField(pData, "backingType", "backing type", "Backing Type") || "";
+
+      const metalImages_yellowGold = getField(pData, "metalImages_yellowGold", "yellow gold images", "Yellow Gold Images") || "";
+      const metalImages_whiteGold = getField(pData, "metalImages_whiteGold", "white gold images", "White Gold Images") || "";
+      const metalImages_roseGold = getField(pData, "metalImages_roseGold", "rose gold images", "Rose Gold Images") || "";
+      const metalImages_silver = getField(pData, "metalImages_silver", "silver images", "Silver Images") || "";
+      const metalImages_platinum = getField(pData, "metalImages_platinum", "platinum images", "Platinum Images") || "";
+
+      // Generate unique slug
+      let finalSlug = String(title)
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, "-")
         .replace(/(^-|-$)+/g, "");
@@ -1027,13 +1087,22 @@ const bulkCreateProducts = async (req, res) => {
         finalSlug = `${finalSlug}-${Math.random().toString(36).substring(2, 7)}`;
       }
 
-      const metalsParsed = formatList(allowedMetals);
+      const metalsParsed = formatList(allowedMetals).map(normalizeMetalName);
       const caratsParsed = formatList(allowedCarats);
       const claritiesParsed = formatList(allowedClarities);
       const colorsParsed = formatList(allowedColors);
       const sizesParsed = formatList(allowedSizes);
       const occasionsParsed = formatList(occasion);
       const keywordsParsed = formatList(keywords);
+
+      const cleanCaratList = (val) => {
+        const list = formatList(val);
+        return list.map(item => String(item).toLowerCase().replace(/ct|carat/gi, "").trim()).filter(Boolean);
+      };
+
+      const diamondCaratParsed = cleanCaratList(diamondCaratRaw);
+      const diamondColorParsed = formatList(diamondColorRaw);
+      const diamondClarityParsed = formatList(diamondClarityRaw);
 
       const metalImages = {
         yellowGold: parseImageUrls(metalImages_yellowGold),
@@ -1072,21 +1141,23 @@ const bulkCreateProducts = async (req, res) => {
         weightPlatinum: parseNumber(weightPlatinum, 0),
         allowedMetals: metalsParsed,
         allowedCarats: caratsParsed,
-        allowedClarities: claritiesParsed,
-        allowedColors: colorsParsed,
+        allowedClarities: diamondClarityParsed.length > 0 ? diamondClarityParsed : claritiesParsed,
+        allowedColors: diamondColorParsed.length > 0 ? diamondColorParsed : colorsParsed,
         allowedSizes: sizesParsed,
         metaTitle: metaTitle || "",
         metaDescription: metaDescription || "",
-        keywords: keywordsParsed
+        keywords: keywordsParsed,
+        settingType: settingType || "",
+        backingType: backingType || ""
       };
 
       // Populate pricing configurations & diamond options automatically
       const mockBody = {
         diamondType: diamondType || "",
         diamondShape: diamondShape || "",
-        allowedCarats: caratsParsed,
-        allowedClarities: claritiesParsed,
-        allowedColors: colorsParsed
+        allowedCarats: diamondCaratParsed.length > 0 ? diamondCaratParsed : caratsParsed,
+        allowedClarities: diamondClarityParsed.length > 0 ? diamondClarityParsed : claritiesParsed,
+        allowedColors: diamondColorParsed.length > 0 ? diamondColorParsed : colorsParsed
       };
       await populatePricingAndDiamonds(productData, mockBody);
 
@@ -1094,15 +1165,27 @@ const bulkCreateProducts = async (req, res) => {
 
       // Generate variant combinations
       if (metalsParsed.length > 0 && caratsParsed.length > 0) {
+        const getSizeTypeFromCategory = (catName) => {
+          if (!catName) return "none";
+          const name = catName.toLowerCase();
+          if (name.includes("ring")) return "ring";
+          if (name.includes("earring")) return "earring";
+          if (name.includes("bracelet")) return "bracelet";
+          if (name.includes("chain") || name.includes("necklace") || name.includes("pendant")) return "chain";
+          return "none";
+        };
+
+        const resolvedSizeType = getSizeTypeFromCategory(categoryName);
+
         const config = {
           metals: metalsParsed,
           purities: caratsParsed,
           sizes: sizesParsed,
-          sizeType: sizesParsed.length > 0 ? "standard" : "none",
+          sizeType: sizesParsed.length > 0 ? resolvedSizeType : "none",
           baseWeight: productData.weight || 0,
           basePrice: productData.Price || 0
         };
-        const variantData = generateVariantCombinations(product._id, title, config);
+        const variantData = await generateVariantCombinations(product._id, title, config);
         const createdVariants = await ProductVariant.insertMany(variantData);
         product.variants = createdVariants.map(v => v._id);
         await product.save();
