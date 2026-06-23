@@ -15,7 +15,6 @@ router.get("/:id", adminOnly, couponController.getCouponById);
 
 // ─── Actions ───
 router.post("/validate", couponController.validateCoupon);
-router.get("/public/exit-intent", couponController.getPublicExitIntentCoupon);
 router.patch("/toggle-status/:id", adminOnly, couponController.toggleCouponStatus);
 
 module.exports = router;

@@ -91,10 +91,6 @@ const couponSchema = new mongoose.Schema(
     },
 
     // ─── Exit Intent & Welcome Capture ───
-    isExitIntent: {
-      type: Boolean,
-      default: false,
-    },
     sendOnRegistration: {
       type: Boolean,
       default: false,

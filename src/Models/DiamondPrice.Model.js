@@ -58,6 +58,11 @@ const diamondPriceSchema = new mongoose.Schema(
     certificate: {
       type: String,
     },
+    cetNumber: {
+      type: String,
+      required: [true, "CET Number is required"],
+      trim: true,
+    },
   },
   { timestamps: true }
 );

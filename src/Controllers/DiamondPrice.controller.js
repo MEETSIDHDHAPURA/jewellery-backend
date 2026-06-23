@@ -12,10 +12,10 @@ const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 // Create Diamond Price
 const createDiamondPrice = async (req, res) => {
   try {
-    const { diamondType, shape, carat, clarity, color, price, stock, isSoldOut } = req.body;
+    const { diamondType, shape, carat, clarity, color, price, stock, isSoldOut, cetNumber } = req.body;
 
-    if (!shape || !carat || !clarity || !color) {
-      throw new ApiError(400, "shape, carat, clarity, and color are required");
+    if (!shape || !carat || !clarity || !color || !cetNumber) {
+      throw new ApiError(400, "shape, carat, clarity, color, and CET number are required");
     }
 
     let imageUrls = [];
@@ -56,6 +56,7 @@ const createDiamondPrice = async (req, res) => {
       isSoldOut: isSoldOut !== undefined ? isSoldOut : false,
       image: imageUrls,
       certificate: certificateUrl,
+      cetNumber,
     });
 
     await logActivity(req, "Create", `create diamond price: ${diamond.diamondType} ${diamond.shape} ${diamond.carat} Carat ${diamond.clarity} ${diamond.color} - Price: ₹${diamond.price}`);
@@ -97,6 +98,7 @@ const bulkCreateDiamondPrices = async (req, res) => {
             color: d.color,
             price: d.price || 0,
             stock: d.stock || 0,
+            cetNumber: d.cetNumber,
             isActive: d.isActive !== undefined ? d.isActive : true,
             isSoldOut: d.isSoldOut !== undefined ? d.isSoldOut : false,
           }

@@ -144,7 +144,7 @@ const getUserOrders = async (req, res) => {
 const updateOrderStatus = async (req, res) => {
   try {
     const { id } = req.params;
-    const { orderStatus, paymentStatus, trackingId } = req.body;
+    const { orderStatus, paymentStatus, trackingId, trackingLink } = req.body;
 
     const order = await Order.findById(id);
     if (!order) throw new ApiError(404, "Order not found");
@@ -154,7 +154,8 @@ const updateOrderStatus = async (req, res) => {
 
     if (orderStatus) order.orderStatus = orderStatus;
     if (paymentStatus) order.paymentStatus = paymentStatus;
-    if (trackingId) order.trackingId = trackingId;
+    if (trackingId !== undefined) order.trackingId = trackingId;
+    if (trackingLink !== undefined) order.trackingLink = trackingLink;
 
     await order.save();
 
@@ -165,8 +166,11 @@ const updateOrderStatus = async (req, res) => {
     if (paymentStatus && originalPaymentStatus !== paymentStatus) {
       changes.push(`payment status to ${paymentStatus}`);
     }
-    if (trackingId) {
+    if (trackingId !== undefined && trackingId !== originalStatus) {
       changes.push(`tracking ID to ${trackingId}`);
+    }
+    if (trackingLink !== undefined) {
+      changes.push(`tracking Link to ${trackingLink}`);
     }
 
     const actionDesc = `Update order ${order.orderId || order._id}: changed ${changes.join(", ")}`;

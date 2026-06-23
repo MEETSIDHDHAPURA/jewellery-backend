@@ -72,6 +72,7 @@ const orderSchema = new mongoose.Schema(
     },
     paymentId: String,
     trackingId: String,
+    trackingLink: String,
   },
   { timestamps: true }
 );

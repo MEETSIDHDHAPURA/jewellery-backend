@@ -205,6 +205,12 @@ const deleteCategory = async (req, res) => {
       throw new ApiError(404, "Category not found");
     }
 
+    const Product = require("../Models/Product.Model");
+    const activeProductsCount = await Product.countDocuments({ category: id, isDeleted: { $ne: true } });
+    if (activeProductsCount > 0) {
+      throw new ApiError(400, "Cannot delete category containing active products");
+    }
+
     if (category.image) {
       await deleteFromCloudinary(category.image);
     }

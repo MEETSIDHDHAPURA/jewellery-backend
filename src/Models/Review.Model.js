@@ -32,6 +32,10 @@ const reviewSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    adminReply: {
+      type: String,
+      default: "",
+    },
   },
   {
     timestamps: true,

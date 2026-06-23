@@ -26,4 +26,7 @@ router.patch("/:reviewId", requireAuth, upload.array("media", 5), reviewControll
 // Route to toggle review visibility (admin hide/unhide)
 router.patch("/:reviewId/toggle-visibility", adminOnly, reviewController.toggleReviewVisibility);
 
+// Route to reply to a review
+router.patch("/:reviewId/reply", adminOnly, reviewController.replyToReview);
+
 module.exports = router;

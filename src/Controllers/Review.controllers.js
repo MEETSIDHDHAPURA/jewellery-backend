@@ -12,7 +12,7 @@ const createReview = async (req, res) => {
     const { rating, comment, userId } = req.body;
 
     // Use req.user if authentication middleware is used, otherwise expect userId in body
-    const user = req.user ? req.user.id : userId;
+    const user = req.user ? (req.user._id || req.user.id) : userId;
 
     if (!user) {
       throw new ApiError(401, "User is required to submit a review");
@@ -276,6 +276,27 @@ const toggleReviewVisibility = async (req, res) => {
   }
 };
 
+const replyToReview = async (req, res) => {
+  try {
+    const { reviewId } = req.params;
+    const { adminReply } = req.body;
+
+    const review = await Review.findById(reviewId);
+    if (!review) {
+      throw new ApiError(404, "Review not found");
+    }
+
+    review.adminReply = adminReply || "";
+    await review.save();
+
+    await logActivity(req, "Update", `Reply to review (Rating: ${review.rating}) with message: "${adminReply || ''}"`);
+
+    res.status(200).json(new ApiResponse(200, review, "Reply saved successfully"));
+  } catch (error) {
+    res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));
+  }
+};
+
 module.exports = {
   createReview,
   getProductReviews,
@@ -283,6 +304,7 @@ module.exports = {
   updateReview,
   getAllReviews,
   checkPurchaseStatus,
-  toggleReviewVisibility
+  toggleReviewVisibility,
+  replyToReview
 };
 

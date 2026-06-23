@@ -110,7 +110,7 @@ const loginUser = async (req, res) => {
 // Forgot Password
 const forgotPassword = async (req, res) => {
   try {
-    const { email } = req.body;
+    const { email, isAdmin } = req.body;
     const user = await User.findOne({ email });
 
     if (!user) {
@@ -123,7 +123,10 @@ const forgotPassword = async (req, res) => {
 
     await user.save();
 
-    const resetUrl = `${process.env.CLIENT_URL || "http://localhost:3000"}/reset-password/${resetToken}`;
+    const clientUrl = isAdmin
+      ? (process.env.ADMIN_CLIENT_URL || "http://localhost:3001")
+      : (process.env.CLIENT_URL || "http://localhost:3000");
+    const resetUrl = `${clientUrl}/reset-password/${resetToken}`;
     const message = `
             <h1>Password Reset Request</h1>
             <p>You requested a password reset. Please click the link below to reset your password:</p>
