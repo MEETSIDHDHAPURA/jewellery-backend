@@ -124,6 +124,12 @@ const getAllOrders = async (req, res) => {
 const getUserOrders = async (req, res) => {
   try {
     const userId = req.params.userId;
+    
+    // Ensure user is fetching their own orders, or is an admin
+    if (req.user?._id?.toString() !== userId?.toString() && req.user?.role !== "admin" && req.user?.role !== "SuperAdmin") {
+      throw new ApiError(403, "Access denied. You can only view your own orders.");
+    }
+
     const orders = await Order.find({ user: userId })
       .populate("items.product")
       .populate("items.diamond")
@@ -181,6 +187,16 @@ const getOrderById = async (req, res) => {
       .populate("items.diamond")
       .populate("user");
     if (!order) throw new ApiError(404, "Order not found");
+
+    // Guest users can fetch guest orders if no user is linked to the order and no token is present,
+    // but if the order is linked to a user, check ownership.
+    if (order.user) {
+      const orderUserId = order.user._id ? order.user._id.toString() : order.user.toString();
+      if (!req.user || (req.user._id.toString() !== orderUserId && req.user.role !== "admin" && req.user.role !== "SuperAdmin")) {
+        throw new ApiError(403, "Access denied. You do not have permission to view this order.");
+      }
+    }
+
     res.status(200).json(new ApiResponse(200, order, "Order fetched successfully"));
   } catch (error) {
     res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));

@@ -1,5 +1,5 @@
 const express = require("express");
-const { auth } = require("../Middlewares/auth.middleware");
+const { adminOnly } = require("../Middlewares/auth.middleware");
 const {
   createMakingCharge,
   getMakingCharges,
@@ -14,14 +14,14 @@ const {
 
 const router = express.Router();
 
-router.post("/", auth, createMakingCharge);
+router.post("/", adminOnly, createMakingCharge);
 router.get("/", getMakingCharges);
 router.get("/config/margin", getMargin);
-router.post("/config/margin", auth, setMargin);
+router.post("/config/margin", adminOnly, setMargin);
 router.get("/config/currency-rates", getCurrencyRates);
-router.post("/config/currency-rates", auth, setCurrencyRates);
+router.post("/config/currency-rates", adminOnly, setCurrencyRates);
 router.get("/:id", getMakingChargeById);
-router.put("/:id", auth, updateMakingCharge);
-router.delete("/:id", auth, deleteMakingCharge);
+router.put("/:id", adminOnly, updateMakingCharge);
+router.delete("/:id", adminOnly, deleteMakingCharge);
 
 module.exports = router;

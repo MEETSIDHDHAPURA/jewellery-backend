@@ -1,5 +1,5 @@
 const express = require("express");
-const { auth } = require("../Middlewares/auth.middleware");
+const { adminOnly } = require("../Middlewares/auth.middleware");
 const {
   createTaxProvince,
   getAllTaxProvinces,
@@ -9,9 +9,9 @@ const {
 
 const router = express.Router();
 
-router.post("/", auth, createTaxProvince);
+router.post("/", adminOnly, createTaxProvince);
 router.get("/", getAllTaxProvinces);
-router.put("/:id", auth, updateTaxProvince);
-router.delete("/:id", auth, deleteTaxProvince);
+router.put("/:id", adminOnly, updateTaxProvince);
+router.delete("/:id", adminOnly, deleteTaxProvince);
 
 module.exports = router;

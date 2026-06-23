@@ -119,11 +119,19 @@ const getProductReviews = async (req, res) => {
 const deleteReview = async (req, res) => {
   try {
     const { reviewId } = req.params;
-    const review = await Review.findByIdAndDelete(reviewId);
+    const review = await Review.findById(reviewId);
 
     if (!review) {
       throw new ApiError(404, "Review not found");
     }
+
+    // Ensure requesting user owns the review or is an admin
+    const reviewUserId = review.user._id ? review.user._id.toString() : review.user.toString();
+    if (req.user?._id?.toString() !== reviewUserId && req.user?.role !== "admin" && req.user?.role !== "SuperAdmin") {
+      throw new ApiError(403, "Access denied. You can only delete your own reviews.");
+    }
+
+    await Review.findByIdAndDelete(reviewId);
 
     const shortComment = review.comment.length > 30 ? `${review.comment.substring(0, 30)}...` : review.comment;
     await logActivity(req, "Delete", `Delete review (Rating: ${review.rating}) with comment: "${shortComment}"`);
@@ -143,6 +151,12 @@ const updateReview = async (req, res) => {
     const review = await Review.findById(reviewId);
     if (!review) {
       throw new ApiError(404, "Review not found");
+    }
+
+    // Ensure requesting user owns the review or is an admin
+    const reviewUserId = review.user._id ? review.user._id.toString() : review.user.toString();
+    if (req.user?._id?.toString() !== reviewUserId && req.user?.role !== "admin" && req.user?.role !== "SuperAdmin") {
+      throw new ApiError(403, "Access denied. You can only update your own reviews.");
     }
 
     if (rating) review.rating = Number(rating);

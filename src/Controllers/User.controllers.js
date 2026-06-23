@@ -176,7 +176,14 @@ const resetPassword = async (req, res) => {
 // Get User Profile
 const getUserProfile = async (req, res) => {
   try {
-    const user = await User.findById(req.params.id || req.user.id).select("-password");
+    const targetUserId = req.params.id || req.user?._id;
+    
+    // Ensure requesting user is accessing their own profile or is an admin
+    if (req.user?._id?.toString() !== targetUserId?.toString() && req.user?.role !== "admin" && req.user?.role !== "SuperAdmin") {
+      throw new ApiError(403, "Access denied. You can only view your own profile.");
+    }
+
+    const user = await User.findById(targetUserId).select("-password");
     if (!user) throw new ApiError(404, "User not found");
     res.status(200).json(new ApiResponse(200, user, "User profile fetched"));
   } catch (error) {
@@ -190,14 +197,32 @@ const updateUserProfile = async (req, res) => {
     const { id } = req.params;
     const { name, phone, addresses, isActive, role } = req.body;
 
+    // Ensure requesting user is updating their own profile or is an admin
+    const isAdmin = req.user?.role === "admin" || req.user?.role === "SuperAdmin";
+    if (req.user?._id?.toString() !== id?.toString() && !isAdmin) {
+      throw new ApiError(403, "Access denied. You can only update your own profile.");
+    }
+
     const user = await User.findById(id);
     if (!user) throw new ApiError(404, "User not found");
 
     if (name) user.name = name;
     if (phone) user.phone = phone;
     if (addresses) user.addresses = addresses;
-    if (isActive !== undefined) user.isActive = isActive;
-    if (role !== undefined) user.role = role;
+    
+    // Role-based field updates protection (Privilege Escalation protection)
+    if (isActive !== undefined) {
+      if (!isAdmin) {
+        throw new ApiError(403, "Access denied. Only admins can toggle user active status.");
+      }
+      user.isActive = isActive;
+    }
+    if (role !== undefined) {
+      if (!isAdmin) {
+        throw new ApiError(403, "Access denied. Only admins can change user roles.");
+      }
+      user.role = role;
+    }
 
     // Handle avatar update if a file is uploaded
     if (req.file) {
@@ -221,6 +246,12 @@ const updatePassword = async (req, res) => {
   try {
     const { id } = req.params;
     const { currentPassword, newPassword } = req.body;
+
+    // Ensure requesting user is changing their own password or is an admin
+    const isAdmin = req.user?.role === "admin" || req.user?.role === "SuperAdmin";
+    if (req.user?._id?.toString() !== id?.toString() && !isAdmin) {
+      throw new ApiError(403, "Access denied. You can only update your own password.");
+    }
 
     if (!currentPassword || !newPassword) {
       throw new ApiError(400, "Current password and new password are required");

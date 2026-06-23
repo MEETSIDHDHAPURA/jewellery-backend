@@ -5,9 +5,9 @@ const ApiError = require("../Utils/ApiError");
 
 // Helper to get user ID from request (token or body/query)
 const getUserId = (req) => {
-  const userId = req.user?._id || req.body.userId || req.query.userId || req.params.userId;
+  const userId = req.user?._id;
   if (!userId) {
-    throw new ApiError(400, "User ID is required");
+    throw new ApiError(401, "User ID is required / User is not authenticated");
   }
   return userId;
 };

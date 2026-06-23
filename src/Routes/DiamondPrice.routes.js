@@ -1,5 +1,5 @@
 const express = require("express");
-const { auth } = require("../Middlewares/auth.middleware");
+const { adminOnly } = require("../Middlewares/auth.middleware");
 const {
   createDiamondPrice,
   bulkCreateDiamondPrices,
@@ -15,26 +15,26 @@ const router = express.Router();
 
 router.post(
   "/",
-  auth,
+  adminOnly,
   upload.fields([
     { name: "image", maxCount: 10 },
     { name: "certificate", maxCount: 1 },
   ]),
   createDiamondPrice
 );
-router.post("/bulk", auth, bulkCreateDiamondPrices);
+router.post("/bulk", adminOnly, bulkCreateDiamondPrices);
 router.get("/", getDiamondPrices);
 router.get("/:id", getDiamondPriceById);
 router.get("/:id/related", getRelatedDiamonds);
 router.put(
   "/:id",
-  auth,
+  adminOnly,
   upload.fields([
     { name: "image", maxCount: 10 },
     { name: "certificate", maxCount: 1 },
   ]),
   updateDiamondPrice
 );
-router.delete("/:id", auth, deleteDiamondPrice);
+router.delete("/:id", adminOnly, deleteDiamondPrice);
 
 module.exports = router;

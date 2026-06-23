@@ -2,12 +2,12 @@ const express = require("express");
 const router = express.Router();
 const productController = require("../Controllers/Product.controllers");
 const upload = require("../Middlewares/multer.middleware");
-const { auth } = require("../Middlewares/auth.middleware");
+const { adminOnly } = require("../Middlewares/auth.middleware");
 
 // Create with multi-image and size chart upload
 router.post(
   "/",
-  auth,
+  adminOnly,
   upload.fields([
     { name: "images_yellowGold", maxCount: 10 },
     { name: "images_whiteGold", maxCount: 10 },
@@ -22,7 +22,7 @@ router.post(
 
 router.post(
   "/create",
-  auth,
+  adminOnly,
   upload.fields([
     { name: "images_yellowGold", maxCount: 10 },
     { name: "images_whiteGold", maxCount: 10 },
@@ -35,7 +35,7 @@ router.post(
   productController.createProduct
 );
 
-router.post("/bulk", auth, productController.bulkCreateProducts);
+router.post("/bulk", adminOnly, productController.bulkCreateProducts);
 
 router.get("/", productController.getAllProducts);
 router.get("/all", productController.getAllProducts);
@@ -43,13 +43,13 @@ router.get("/search", productController.globalSearch);
 
 router.get("/related/:id", productController.getRelatedProducts);
 
-router.get("/:id", auth, productController.getProductById);
-router.get("/get/:id", auth, productController.getProductById);
+router.get("/:id", productController.getProductById);
+router.get("/get/:id", productController.getProductById);
 
 // Update with multi-image and size chart upload
 router.put(
   "/:id",
-  auth,
+  adminOnly,
   upload.fields([
     { name: "images_yellowGold", maxCount: 10 },
     { name: "images_whiteGold", maxCount: 10 },
@@ -64,7 +64,7 @@ router.put(
 
 router.put(
   "/update/:id",
-  auth,
+  adminOnly,
   upload.fields([
     { name: "images_yellowGold", maxCount: 10 },
     { name: "images_whiteGold", maxCount: 10 },
@@ -77,8 +77,8 @@ router.put(
   productController.updateProduct
 );
 
-router.delete("/:id", auth, productController.deleteProduct);
-router.delete("/delete/:id", auth, productController.deleteProduct);
+router.delete("/:id", adminOnly, productController.deleteProduct);
+router.delete("/delete/:id", adminOnly, productController.deleteProduct);
 
 module.exports = router;
 
