@@ -1274,16 +1274,26 @@ const globalSearch = async (req, res) => {
     const searchRegex = new RegExp(escapedSearch, "i");
 
     // Product search filters: search in title, sku, description, subCategory, keywords
+    const productOrConditions = [
+      { title: searchRegex },
+      { sku: searchRegex },
+      { description: searchRegex },
+      { subCategory: searchRegex },
+      { keywords: searchRegex }
+    ];
+
+    // For multi-word searches, also match products where title contains ALL individual words (in any order)
+    const words = (cleanedQuery || query).split(/\s+/).filter(w => w.length > 0);
+    if (words.length > 1) {
+      productOrConditions.unshift({
+        $and: words.map(w => ({ title: new RegExp(escapeRegex(w), "i") }))
+      });
+    }
+
     const productFilter = {
       isDeleted: false,
       isActive: true,
-      $or: [
-        { title: searchRegex },
-        { sku: searchRegex },
-        { description: searchRegex },
-        { subCategory: searchRegex },
-        { keywords: searchRegex }
-      ]
+      $or: productOrConditions
     };
 
     // DiamondPrice search filters
