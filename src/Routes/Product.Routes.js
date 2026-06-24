@@ -15,7 +15,7 @@ router.post(
     { name: "images_silver", maxCount: 10 },
     { name: "images_platinum", maxCount: 10 },
     { name: "sizeChart", maxCount: 1 },
-    { name: "certificate", maxCount: 1 },
+    { name: "certificate", maxCount: 10 },
   ]),
   productController.createProduct
 );
@@ -30,7 +30,7 @@ router.post(
     { name: "images_silver", maxCount: 10 },
     { name: "images_platinum", maxCount: 10 },
     { name: "sizeChart", maxCount: 1 },
-    { name: "certificate", maxCount: 1 },
+    { name: "certificate", maxCount: 10 },
   ]),
   productController.createProduct
 );
@@ -57,7 +57,7 @@ router.put(
     { name: "images_silver", maxCount: 10 },
     { name: "images_platinum", maxCount: 10 },
     { name: "sizeChart", maxCount: 1 },
-    { name: "certificate", maxCount: 1 },
+    { name: "certificate", maxCount: 10 },
   ]),
   productController.updateProduct
 );
@@ -72,7 +72,7 @@ router.put(
     { name: "images_silver", maxCount: 10 },
     { name: "images_platinum", maxCount: 10 },
     { name: "sizeChart", maxCount: 1 },
-    { name: "certificate", maxCount: 1 },
+    { name: "certificate", maxCount: 10 },
   ]),
   productController.updateProduct
 );
