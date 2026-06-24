@@ -55,7 +55,13 @@ const diamondPriceSchema = new mongoose.Schema(
     image: {
       type: [String],
     },
-    certificate: {
+    igi: {
+      type: String,
+    },
+    non: {
+      type: String,
+    },
+    gia: {
       type: String,
     },
     cetNumber: {

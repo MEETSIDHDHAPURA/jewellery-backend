@@ -18,7 +18,9 @@ router.post(
   adminOnly,
   upload.fields([
     { name: "image", maxCount: 10 },
-    { name: "certificate", maxCount: 1 },
+    { name: "igi", maxCount: 1 },
+    { name: "gia", maxCount: 1 },
+    { name: "non", maxCount: 1 },
   ]),
   createDiamondPrice
 );
@@ -31,7 +33,9 @@ router.put(
   adminOnly,
   upload.fields([
     { name: "image", maxCount: 10 },
-    { name: "certificate", maxCount: 1 },
+    { name: "igi", maxCount: 1 },
+    { name: "gia", maxCount: 1 },
+    { name: "non", maxCount: 1 },
   ]),
   updateDiamondPrice
 );

@@ -19,10 +19,12 @@ const createDiamondPrice = async (req, res) => {
     }
 
     let imageUrls = [];
-    let certificateUrl = "";
+    let igiUrl = "";
+    let giaUrl = "";
+    let nonUrl = "";
 
     if (req.files) {
-      // Upload images and certificate in parallel
+      // Upload images and certificates in parallel
       const uploadPromises = [];
       if (req.files.image) {
         req.files.image.forEach(file => {
@@ -34,11 +36,27 @@ const createDiamondPrice = async (req, res) => {
           );
         });
       }
-      if (req.files.certificate) {
+      if (req.files.igi) {
         uploadPromises.push(
-          uploadOnCloudinary(req.files.certificate[0].path).then(uploadRes => {
-            fs.unlink(req.files.certificate[0].path, () => {});
-            if (uploadRes) certificateUrl = uploadRes.secure_url;
+          uploadOnCloudinary(req.files.igi[0].path).then(uploadRes => {
+            fs.unlink(req.files.igi[0].path, () => {});
+            if (uploadRes) igiUrl = uploadRes.secure_url;
+          })
+        );
+      }
+      if (req.files.gia) {
+        uploadPromises.push(
+          uploadOnCloudinary(req.files.gia[0].path).then(uploadRes => {
+            fs.unlink(req.files.gia[0].path, () => {});
+            if (uploadRes) giaUrl = uploadRes.secure_url;
+          })
+        );
+      }
+      if (req.files.non) {
+        uploadPromises.push(
+          uploadOnCloudinary(req.files.non[0].path).then(uploadRes => {
+            fs.unlink(req.files.non[0].path, () => {});
+            if (uploadRes) nonUrl = uploadRes.secure_url;
           })
         );
       }
@@ -55,7 +73,9 @@ const createDiamondPrice = async (req, res) => {
       stock: stock || 0,
       isSoldOut: isSoldOut !== undefined ? isSoldOut : false,
       image: imageUrls,
-      certificate: certificateUrl,
+      igi: igiUrl || undefined,
+      gia: giaUrl || undefined,
+      non: nonUrl || undefined,
       cetNumber,
     });
 
@@ -323,11 +343,27 @@ const updateDiamondPrice = async (req, res) => {
           );
         });
       }
-      if (req.files.certificate) {
+      if (req.files.igi) {
         uploadPromises.push(
-          updateOnCloudinary(existing.certificate, req.files.certificate[0].path).then(uploadRes => {
-            fs.unlink(req.files.certificate[0].path, () => {});
-            if (uploadRes) updateData.certificate = uploadRes.secure_url;
+          updateOnCloudinary(existing.igi, req.files.igi[0].path).then(uploadRes => {
+            fs.unlink(req.files.igi[0].path, () => {});
+            if (uploadRes) updateData.igi = uploadRes.secure_url;
+          })
+        );
+      }
+      if (req.files.gia) {
+        uploadPromises.push(
+          updateOnCloudinary(existing.gia, req.files.gia[0].path).then(uploadRes => {
+            fs.unlink(req.files.gia[0].path, () => {});
+            if (uploadRes) updateData.gia = uploadRes.secure_url;
+          })
+        );
+      }
+      if (req.files.non) {
+        uploadPromises.push(
+          updateOnCloudinary(existing.non, req.files.non[0].path).then(uploadRes => {
+            fs.unlink(req.files.non[0].path, () => {});
+            if (uploadRes) updateData.non = uploadRes.secure_url;
           })
         );
       }
@@ -384,7 +420,9 @@ const deleteDiamondPrice = async (req, res) => {
         deletePromises.push(deleteFromCloudinary(diamond.image));
       }
     }
-    if (diamond.certificate) deletePromises.push(deleteFromCloudinary(diamond.certificate));
+    if (diamond.igi) deletePromises.push(deleteFromCloudinary(diamond.igi));
+    if (diamond.gia) deletePromises.push(deleteFromCloudinary(diamond.gia));
+    if (diamond.non) deletePromises.push(deleteFromCloudinary(diamond.non));
     if (deletePromises.length > 0) await Promise.all(deletePromises);
 
     await logActivity(req, "Delete", `Delete diamond price of: ${diamond.diamondType || "Lab Grown"} ${diamond.shape} ${diamond.carat} Carat ${diamond.clarity} ${diamond.color}`);
