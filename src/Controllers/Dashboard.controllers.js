@@ -157,6 +157,7 @@ const getDashboardData = async (req, res) => {
 
       // Recent Orders
       Order.find()
+        .select("orderId user totalAmount orderStatus paymentStatus createdAt")
         .populate("user", "name email")
         .sort({ createdAt: -1 })
         .limit(5)
@@ -164,6 +165,7 @@ const getDashboardData = async (req, res) => {
 
       // Recent Reviews
       Review.find()
+        .select("user product rating comment createdAt")
         .populate("user", "name email avatar")
         .populate("product", "title")
         .sort({ createdAt: -1 })

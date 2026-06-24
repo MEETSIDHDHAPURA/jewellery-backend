@@ -60,9 +60,12 @@ const parseBoolean = (val, defaultVal = false) => {
 const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 // Helper to generate SKU: first 2 letters of category + first 2 letters of subCategory + 5 random digits
-const generateSKU = async (categoryId, subCategory) => {
+// Optimized: generates multiple candidates and batch-checks uniqueness in a single DB query
+const generateSKU = async (categoryId, subCategory, categoryNameHint = null) => {
   let catPrefix = "XX";
-  if (categoryId) {
+  if (categoryNameHint) {
+    catPrefix = categoryNameHint.replace(/[^a-zA-Z]/g, "").substring(0, 2).toUpperCase();
+  } else if (categoryId) {
     const cat = await Category.findById(categoryId).select("name").lean();
     if (cat && cat.name) {
       catPrefix = cat.name.replace(/[^a-zA-Z]/g, "").substring(0, 2).toUpperCase();
@@ -72,19 +75,23 @@ const generateSKU = async (categoryId, subCategory) => {
     ? subCategory.replace(/[^a-zA-Z]/g, "").substring(0, 2).toUpperCase()
     : "XX";
 
-  let unique = false;
-  let attempts = 0;
-  let sku = "";
-  while (!unique && attempts < 10) {
-    const randomNum = Math.floor(10000 + Math.random() * 90000); // 5-digit random number
-    sku = `${catPrefix}-${subCatPrefix}-${randomNum}`;
-    const exists = await Product.exists({ sku });
-    if (!exists) {
-      unique = true;
-    }
-    attempts++;
+  // Generate 10 candidates upfront and batch-check in one query
+  const candidates = [];
+  for (let i = 0; i < 10; i++) {
+    const randomNum = Math.floor(10000 + Math.random() * 90000);
+    candidates.push(`${catPrefix}-${subCatPrefix}-${randomNum}`);
   }
-  return sku;
+
+  const existingSkus = await Product.find({ sku: { $in: candidates } }).select("sku").lean();
+  const existingSet = new Set(existingSkus.map(p => p.sku));
+
+  // Return the first candidate that doesn't exist
+  for (const sku of candidates) {
+    if (!existingSet.has(sku)) return sku;
+  }
+
+  // Fallback: return last candidate (extremely unlikely collision on all 10)
+  return candidates[candidates.length - 1];
 };
 
 // Helper to upload multiple files in parallel
@@ -106,60 +113,19 @@ const uploadFilesParallel = async (files, uploadFn) => {
 };
 
 const populatePricingAndDiamonds = async (productData, body, productId = null) => {
-  // 1. Populate makingCharge, basePrice, and silverBasePrice from MakingCharge collection
-  try {
-    const allowedMetals = typeof productData.allowedMetals === "string" ? safeParseJSON(productData.allowedMetals, []) : (productData.allowedMetals || []);
-    const selectedMetalVal = allowedMetals && allowedMetals[0] ? allowedMetals[0] : "";
+  // Pre-parse all inputs synchronously before any DB calls
+  const allowedMetals = typeof productData.allowedMetals === "string" ? safeParseJSON(productData.allowedMetals, []) : (productData.allowedMetals || []);
+  const selectedMetalVal = allowedMetals && allowedMetals[0] ? allowedMetals[0] : "";
 
-    // Determine which metals we need to query
-    const metalsToQuery = ["Yellow Gold", "Silver"];
-    if (selectedMetalVal) {
-      const lowerMetal = selectedMetalVal.toLowerCase();
-      let searchMetal = "Yellow Gold";
-      if (lowerMetal.includes("silver")) searchMetal = "Silver";
-      else if (lowerMetal.includes("platinum")) searchMetal = "Platinum";
-      else if (lowerMetal.includes("white")) searchMetal = "White Gold";
-      else if (lowerMetal.includes("rose")) searchMetal = "Rose Gold";
-      if (!metalsToQuery.includes(searchMetal)) metalsToQuery.push(searchMetal);
-    }
+  let diamondType = body.diamondType;
+  let diamondShape = body.diamondShape;
+  let allowedCarats = typeof body.allowedCarats === "string" ? safeParseJSON(body.allowedCarats, []) : (body.allowedCarats || []);
+  let allowedClarities = typeof body.allowedClarities === "string" ? safeParseJSON(body.allowedClarities, []) : (body.allowedClarities || []);
+  let allowedColors = typeof body.allowedColors === "string" ? safeParseJSON(body.allowedColors, []) : (body.allowedColors || []);
 
-    // Single query to fetch all needed making charges at once
-    const allCharges = await MakingCharge.find({ metal: { $in: metalsToQuery } }).lean();
-    const chargeMap = {};
-    for (const charge of allCharges) {
-      chargeMap[charge.metal] = charge;
-    }
-
-    if (chargeMap["Yellow Gold"]) productData.basePrice = chargeMap["Yellow Gold"].value || 0;
-    if (chargeMap["Silver"]) productData.silverBasePrice = chargeMap["Silver"].value || 0;
-
-    if (selectedMetalVal) {
-      const lowerMetal = selectedMetalVal.toLowerCase();
-      let searchMetal = "Yellow Gold";
-      if (lowerMetal.includes("silver")) searchMetal = "Silver";
-      else if (lowerMetal.includes("platinum")) searchMetal = "Platinum";
-      else if (lowerMetal.includes("white")) searchMetal = "White Gold";
-      else if (lowerMetal.includes("rose")) searchMetal = "Rose Gold";
-
-      const primaryCharge = chargeMap[searchMetal];
-      if (primaryCharge) {
-        productData.makingCharge = primaryCharge.value || 0;
-        productData.makingChargeType = "per_gram";
-      }
-    }
-  } catch (err) {
-    console.error("Error populating making charges:", err);
-  }
-
-  // 2. Populate diamondOptions based on allowed attributes and selections
-  try {
-    let diamondType = body.diamondType;
-    let diamondShape = body.diamondShape;
-    let allowedCarats = typeof body.allowedCarats === "string" ? safeParseJSON(body.allowedCarats, []) : (body.allowedCarats || []);
-    let allowedClarities = typeof body.allowedClarities === "string" ? safeParseJSON(body.allowedClarities, []) : (body.allowedClarities || []);
-    let allowedColors = typeof body.allowedColors === "string" ? safeParseJSON(body.allowedColors, []) : (body.allowedColors || []);
-
-    if (productId && (!diamondType || !diamondShape || allowedCarats.length === 0)) {
+  // If updating an existing product and diamond params are missing, fetch them
+  if (productId && (!diamondType || !diamondShape || allowedCarats.length === 0)) {
+    try {
       const existing = await Product.findById(productId).select("diamondOptions title allowedCarats allowedClarities allowedColors").lean();
       if (existing) {
         if (!diamondType) diamondType = existing.diamondOptions && existing.diamondOptions[0] ? existing.diamondOptions[0].diamondType : "";
@@ -171,33 +137,80 @@ const populatePricingAndDiamonds = async (productData, body, productId = null) =
         if (allowedClarities.length === 0) allowedClarities = existing.allowedClarities || [];
         if (allowedColors.length === 0) allowedColors = existing.allowedColors || [];
       }
+    } catch (err) {
+      console.error("Error fetching existing product for diamond defaults:", err);
     }
+  }
 
-    if (diamondType && diamondShape && allowedCarats.length > 0) {
-      const caratNumbers = allowedCarats.map(c => Number(c) || parseFloat(c));
+  // Determine which metals we need to query
+  const metalsToQuery = ["Yellow Gold", "Silver"];
+  if (selectedMetalVal) {
+    const lowerMetal = selectedMetalVal.toLowerCase();
+    let searchMetal = "Yellow Gold";
+    if (lowerMetal.includes("silver")) searchMetal = "Silver";
+    else if (lowerMetal.includes("platinum")) searchMetal = "Platinum";
+    else if (lowerMetal.includes("white")) searchMetal = "White Gold";
+    else if (lowerMetal.includes("rose")) searchMetal = "Rose Gold";
+    if (!metalsToQuery.includes(searchMetal)) metalsToQuery.push(searchMetal);
+  }
 
-      // Escape regex inputs to prevent ReDoS
-      const matchingDiamonds = await DiamondPrice.find({
-        diamondType: { $regex: new RegExp(`^${escapeRegex(diamondType)}$`, "i") },
-        shape: { $regex: new RegExp(`^${escapeRegex(diamondShape)}$`, "i") },
-        carat: { $in: caratNumbers },
-        clarity: { $in: allowedClarities },
-        color: { $in: allowedColors }
-      }).lean();
+  // Run MakingCharge and DiamondPrice queries in PARALLEL
+  const makingChargePromise = MakingCharge.find({ metal: { $in: metalsToQuery } }).lean().catch(err => {
+    console.error("Error populating making charges:", err);
+    return [];
+  });
 
-      if (matchingDiamonds && matchingDiamonds.length > 0) {
-        productData.diamondOptions = matchingDiamonds.map(d => ({
-          diamondType: d.diamondType,
-          carat: d.carat.toString(),
-          clarity: d.clarity,
-          color: d.color,
-          additionalPrice: d.price || 0,
-          isActive: true
-        }));
-      }
+  let diamondPromise = Promise.resolve([]);
+  if (diamondType && diamondShape && allowedCarats.length > 0) {
+    const caratNumbers = allowedCarats.map(c => Number(c) || parseFloat(c));
+    diamondPromise = DiamondPrice.find({
+      diamondType: { $regex: new RegExp(`^${escapeRegex(diamondType)}$`, "i") },
+      shape: { $regex: new RegExp(`^${escapeRegex(diamondShape)}$`, "i") },
+      carat: { $in: caratNumbers },
+      clarity: { $in: allowedClarities },
+      color: { $in: allowedColors }
+    }).lean().catch(err => {
+      console.error("Error populating diamond options:", err);
+      return [];
+    });
+  }
+
+  const [allCharges, matchingDiamonds] = await Promise.all([makingChargePromise, diamondPromise]);
+
+  // 1. Apply making charge data
+  const chargeMap = {};
+  for (const charge of allCharges) {
+    chargeMap[charge.metal] = charge;
+  }
+
+  if (chargeMap["Yellow Gold"]) productData.basePrice = chargeMap["Yellow Gold"].value || 0;
+  if (chargeMap["Silver"]) productData.silverBasePrice = chargeMap["Silver"].value || 0;
+
+  if (selectedMetalVal) {
+    const lowerMetal = selectedMetalVal.toLowerCase();
+    let searchMetal = "Yellow Gold";
+    if (lowerMetal.includes("silver")) searchMetal = "Silver";
+    else if (lowerMetal.includes("platinum")) searchMetal = "Platinum";
+    else if (lowerMetal.includes("white")) searchMetal = "White Gold";
+    else if (lowerMetal.includes("rose")) searchMetal = "Rose Gold";
+
+    const primaryCharge = chargeMap[searchMetal];
+    if (primaryCharge) {
+      productData.makingCharge = primaryCharge.value || 0;
+      productData.makingChargeType = "per_gram";
     }
-  } catch (err) {
-    console.error("Error populating diamond options:", err);
+  }
+
+  // 2. Apply diamond options data
+  if (matchingDiamonds && matchingDiamonds.length > 0) {
+    productData.diamondOptions = matchingDiamonds.map(d => ({
+      diamondType: d.diamondType,
+      carat: d.carat.toString(),
+      clarity: d.clarity,
+      color: d.color,
+      additionalPrice: d.price || 0,
+      isActive: true
+    }));
   }
 };
 
@@ -227,8 +240,34 @@ const createProduct = async (req, res) => {
       platinum: []
     };
 
+    // --- PHASE 1: Slug check + Image uploads run in PARALLEL ---
+    // Slug doesn't depend on images, so start both at once
+
+    // Prepare slug check promise
+    let finalSlug = slug;
+    let slugPromise = Promise.resolve();
+    if (!finalSlug && title) {
+      finalSlug = title
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/(^-|-$)+/g, "");
+
+      const slugToCheck = finalSlug;
+      slugPromise = Product.exists({ slug: slugToCheck }).then(exists => {
+        if (exists) {
+          finalSlug = `${slugToCheck}-${Math.random().toString(36).substring(2, 7)}`;
+        }
+      });
+    } else if (finalSlug) {
+      finalSlug = finalSlug
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/(^-|-$)+/g, "");
+    }
+
+    // Prepare image upload promises
+    let imagePromise = Promise.resolve();
     if (req.files) {
-      // Upload all metal images in parallel for faster processing
       const metalUploadMap = {
         images_yellowGold: "yellowGold",
         images_whiteGold: "whiteGold",
@@ -263,27 +302,17 @@ const createProduct = async (req, res) => {
         );
       }
 
-      await Promise.all([...metalUploadPromises, ...miscUploads]);
+      imagePromise = Promise.all([...metalUploadPromises, ...miscUploads]);
     }
 
-    // Auto-generate unique slug if not provided
-    let finalSlug = slug;
-    if (!finalSlug && title) {
-      finalSlug = title
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, "-")
-        .replace(/(^-|-$)+/g, "");
+    // Fetch category name once (reused for SKU generation to avoid duplicate query)
+    const categoryNamePromise = category
+      ? Category.findById(category).select("name").lean()
+      : Promise.resolve(null);
 
-      const existingProduct = await Product.findOne({ slug: finalSlug });
-      if (existingProduct) {
-        finalSlug = `${finalSlug}-${Math.random().toString(36).substring(2, 7)}`;
-      }
-    } else if (finalSlug) {
-      finalSlug = finalSlug
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, "-")
-        .replace(/(^-|-$)+/g, "");
-    }
+    // Run slug check + image uploads + category lookup in parallel
+    const [, , categoryDoc] = await Promise.all([slugPromise, imagePromise, categoryNamePromise]);
+    const categoryNameHint = categoryDoc && categoryDoc.name ? categoryDoc.name : null;
 
     // 1. Create Base Product
     const productData = {
@@ -327,10 +356,12 @@ const createProduct = async (req, res) => {
       keywords: safeParseJSON(keywords, [])
     };
 
-    await populatePricingAndDiamonds(productData, req.body);
-
-    // Generate SKU: category first 2 letters + subCategory first 2 letters + 5 random digits
-    productData.sku = await generateSKU(category, subCategory);
+    // --- PHASE 2: Pricing + SKU generation run in PARALLEL ---
+    const [, sku] = await Promise.all([
+      populatePricingAndDiamonds(productData, req.body),
+      generateSKU(category, subCategory, categoryNameHint)
+    ]);
+    productData.sku = sku;
 
     const product = await Product.create(productData);
 
@@ -341,13 +372,15 @@ const createProduct = async (req, res) => {
 
       const createdVariants = await ProductVariant.insertMany(variantData);
 
-      // 3. Link variants back to product
-      product.variants = createdVariants.map(v => v._id);
-      await product.save();
+      // 3. Link variants back to product (lightweight updateOne instead of full save)
+      const variantIds = createdVariants.map(v => v._id);
+      await Product.updateOne({ _id: product._id }, { variants: variantIds });
+      product.variants = variantIds;
     }
 
     clearLandingPageCache();
-    await logActivity(req, "Create", `create product ${product.title}`);
+    // Fire-and-forget: don't block response on activity logging
+    logActivity(req, "Create", `create product ${product.title}`).catch(() => { });
     res.status(201).json(new ApiResponse(201, product, "Product and variants created successfully"));
   } catch (error) {
     res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));
@@ -702,7 +735,7 @@ const getProductById = async (req, res) => {
 const updateProduct = async (req, res) => {
   try {
     const { id } = req.params;
-    const existing = await Product.findById(id);
+    const existing = await Product.findById(id).lean();
     if (!existing) throw new ApiError(404, "Product not found");
 
     const originalTitle = existing.title;
@@ -745,6 +778,8 @@ const updateProduct = async (req, res) => {
     }
 
     // Handle slug formatting if updated
+    // Prepare slug check as a promise to run in parallel with image uploads
+    let slugPromise = Promise.resolve();
     if (updateData.slug) {
       updateData.slug = updateData.slug
         .toLowerCase()
@@ -756,11 +791,12 @@ const updateProduct = async (req, res) => {
         .replace(/[^a-z0-9]+/g, "-")
         .replace(/(^-|-$)+/g, "");
 
-      const existingProduct = await Product.findOne({ slug: generatedSlug, _id: { $ne: id } });
-      if (existingProduct) {
-        generatedSlug = `${generatedSlug}-${Math.random().toString(36).substring(2, 7)}`;
-      }
-      updateData.slug = generatedSlug;
+      slugPromise = Product.exists({ slug: generatedSlug, _id: { $ne: id } }).then(exists => {
+        if (exists) {
+          generatedSlug = `${generatedSlug}-${Math.random().toString(36).substring(2, 7)}`;
+        }
+        updateData.slug = generatedSlug;
+      });
     }
 
     let finalMetalImages = {
@@ -786,8 +822,9 @@ const updateProduct = async (req, res) => {
       finalMetalImages.platinum = existing.metalImages.platinum || [];
     }
 
+    // Prepare image upload promise
+    let imagePromise = Promise.resolve();
     if (req.files) {
-      // Upload all metal images in parallel for faster processing
       const metalUploadMap = {
         images_yellowGold: "yellowGold",
         images_whiteGold: "whiteGold",
@@ -822,8 +859,11 @@ const updateProduct = async (req, res) => {
         );
       }
 
-      await Promise.all([...metalUploadPromises, ...miscUploads]);
+      imagePromise = Promise.all([...metalUploadPromises, ...miscUploads]);
     }
+
+    // Run slug check + image uploads in PARALLEL
+    await Promise.all([slugPromise, imagePromise]);
 
     updateData.metalImages = finalMetalImages;
 
@@ -833,15 +873,21 @@ const updateProduct = async (req, res) => {
       updateData.isNew = false;
     }
 
-    await populatePricingAndDiamonds(updateData, req.body, id);
-
-    // Regenerate SKU if category or subCategory changed, or if product has no SKU
+    // Pricing + SKU generation run in PARALLEL when SKU needs regeneration
     const categoryChanged = updateData.category && String(updateData.category) !== String(existing.category);
     const subCategoryChanged = updateData.subCategory !== undefined && updateData.subCategory !== existing.subCategory;
-    if (categoryChanged || subCategoryChanged || !existing.sku) {
+    const needsSkuRegen = categoryChanged || subCategoryChanged || !existing.sku;
+
+    if (needsSkuRegen) {
       const skuCategoryId = updateData.category || existing.category;
       const skuSubCategory = updateData.subCategory !== undefined ? updateData.subCategory : existing.subCategory;
-      updateData.sku = await generateSKU(skuCategoryId, skuSubCategory);
+      const [, sku] = await Promise.all([
+        populatePricingAndDiamonds(updateData, req.body, id),
+        generateSKU(skuCategoryId, skuSubCategory)
+      ]);
+      updateData.sku = sku;
+    } else {
+      await populatePricingAndDiamonds(updateData, req.body, id);
     }
 
     const product = await Product.findByIdAndUpdate(id, updateData, { returnDocument: "after" })
@@ -861,7 +907,8 @@ const updateProduct = async (req, res) => {
       actionDescription = `update product price of "${product.title}" from ${originalPrice} to ${product.Price}`;
     }
 
-    await logActivity(req, "Update", actionDescription);
+    // Fire-and-forget: don't block response on activity logging
+    logActivity(req, "Update", actionDescription).catch(() => { });
 
     clearLandingPageCache();
     res.status(200).json(new ApiResponse(200, product, "Product updated successfully"));
@@ -883,12 +930,13 @@ const deleteProduct = async (req, res) => {
 
     // Soft-delete product and deactivate variants in parallel
     const [product] = await Promise.all([
-      Product.findByIdAndUpdate(productId, { isDeleted: true }, { returnDocument: "after" }),
+      Product.findByIdAndUpdate(productId, { isDeleted: true }, { returnDocument: "after" }).select("title").lean(),
       ProductVariant.updateMany({ productId: new mongoose.Types.ObjectId(productId) }, { isActive: false })
     ]);
     if (!product) throw new ApiError(404, "Product not found");
 
-    await logActivity(req, "Delete", `Delete this product ${product.title}`);
+    // Fire-and-forget: don't block response on activity logging
+    logActivity(req, "Delete", `Delete this product ${product.title}`).catch(() => { });
 
     clearLandingPageCache();
     res.status(200).json(new ApiResponse(200, {}, "Product deleted successfully"));
@@ -1002,6 +1050,18 @@ const bulkCreateProducts = async (req, res) => {
     // 2. Database Insertion Phase
     const createdProducts = [];
 
+    // Batch all slug checks in a single query instead of N sequential checks
+    const slugCandidates = validatedProducts.map(item => {
+      return item.pData.title
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/(^-|-$)+/g, "");
+    });
+    const existingSlugs = await Product.find({ slug: { $in: slugCandidates } }).select("slug").lean();
+    const existingSlugSet = new Set(existingSlugs.map(p => p.sku));
+    // Track slugs used within this batch to avoid intra-batch collisions
+    const usedSlugs = new Set();
+
     for (const item of validatedProducts) {
       const { pData, categoryId } = item;
       const {
@@ -1016,16 +1076,16 @@ const bulkCreateProducts = async (req, res) => {
         metalImages_yellowGold, metalImages_whiteGold, metalImages_roseGold, metalImages_silver, metalImages_platinum
       } = pData;
 
-      // Generate unique slug (use select + lean for faster check)
+      // Generate unique slug using pre-fetched batch results
       let finalSlug = title
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, "-")
         .replace(/(^-|-$)+/g, "");
 
-      const slugExists = await Product.exists({ slug: finalSlug });
-      if (slugExists) {
+      if (existingSlugSet.has(finalSlug) || usedSlugs.has(finalSlug)) {
         finalSlug = `${finalSlug}-${Math.random().toString(36).substring(2, 7)}`;
       }
+      usedSlugs.add(finalSlug);
 
       const metalsParsed = formatList(allowedMetals);
       const caratsParsed = formatList(allowedCarats);
@@ -1080,7 +1140,7 @@ const bulkCreateProducts = async (req, res) => {
         keywords: keywordsParsed
       };
 
-      // Populate pricing configurations & diamond options automatically
+      // Populate pricing + generate SKU in PARALLEL
       const mockBody = {
         diamondType: diamondType || "",
         diamondShape: diamondShape || "",
@@ -1088,7 +1148,11 @@ const bulkCreateProducts = async (req, res) => {
         allowedClarities: claritiesParsed,
         allowedColors: colorsParsed
       };
-      await populatePricingAndDiamonds(productData, mockBody);
+      const [, sku] = await Promise.all([
+        populatePricingAndDiamonds(productData, mockBody),
+        generateSKU(categoryId, subCategory)
+      ]);
+      productData.sku = sku;
 
       const product = await Product.create(productData);
 
@@ -1104,14 +1168,16 @@ const bulkCreateProducts = async (req, res) => {
         };
         const variantData = generateVariantCombinations(product._id, title, config);
         const createdVariants = await ProductVariant.insertMany(variantData);
-        product.variants = createdVariants.map(v => v._id);
-        await product.save();
+        const variantIds = createdVariants.map(v => v._id);
+        await Product.updateOne({ _id: product._id }, { variants: variantIds });
+        product.variants = variantIds;
       }
 
       createdProducts.push(product);
     }
 
-    await logActivity(req, "Create", `bulk create ${createdProducts.length} products`);
+    // Fire-and-forget: don't block response on activity logging
+    logActivity(req, "Create", `bulk create ${createdProducts.length} products`).catch(() => { });
 
     clearLandingPageCache();
     res.status(201).json(new ApiResponse(201, createdProducts, `${createdProducts.length} products imported successfully`));
@@ -1130,7 +1196,7 @@ const getRelatedProducts = async (req, res) => {
       throw new ApiError(400, "Invalid product ID");
     }
 
-    const product = await Product.findById(id).lean();
+    const product = await Product.findById(id).select("category subCategory occasion gender").lean();
     if (!product || product.isDeleted || !product.isActive) {
       throw new ApiError(404, "Product not found");
     }

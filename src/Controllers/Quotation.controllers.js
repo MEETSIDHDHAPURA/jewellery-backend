@@ -49,7 +49,7 @@ const createQuotation = async (req, res) => {
     // Check if duplicate custom ID
     let finalId = id;
     if (finalId) {
-      const existing = await Quotation.findOne({ id: finalId });
+      const existing = await Quotation.findOne({ id: finalId }).select("_id").lean();
       if (existing) {
         throw new ApiError(409, `Quotation with ID ${finalId} already exists`);
       }
@@ -104,7 +104,7 @@ const createQuotation = async (req, res) => {
 // Get All Quotations
 const getAllQuotations = async (req, res) => {
   try {
-    const quotations = await Quotation.find().sort({ createdAt: -1 });
+    const quotations = await Quotation.find().sort({ createdAt: -1 }).lean();
     res.status(200).json(new ApiResponse(200, quotations, "Quotations fetched successfully"));
   } catch (error) {
     res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));
@@ -170,7 +170,7 @@ const getQuotationById = async (req, res) => {
         { id: id },
         ...(isMongoId ? [{ _id: id }] : [])
       ]
-    });
+    }).lean();
 
     if (!quotation) {
       throw new ApiError(404, "Quotation not found");

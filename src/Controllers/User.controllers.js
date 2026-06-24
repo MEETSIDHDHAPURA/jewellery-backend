@@ -99,7 +99,7 @@ const loginUser = async (req, res) => {
       { expiresIn: "7d" }
     );
 
-    const loggedInUser = await User.findById(user._id).select("-password -isActive -isDeleted");
+    const loggedInUser = await User.findById(user._id).select("-password -isActive -isDeleted").lean();
 
     res.status(200).json(new ApiResponse(200, { user: loggedInUser, token }, "Login successful"));
   } catch (error) {
@@ -186,7 +186,7 @@ const getUserProfile = async (req, res) => {
       throw new ApiError(403, "Access denied. You can only view your own profile.");
     }
 
-    const user = await User.findById(targetUserId).select("-password");
+    const user = await User.findById(targetUserId).select("-password").lean();
     if (!user) throw new ApiError(404, "User not found");
     res.status(200).json(new ApiResponse(200, user, "User profile fetched"));
   } catch (error) {
@@ -236,7 +236,7 @@ const updateUserProfile = async (req, res) => {
     }
 
     await user.save();
-    const updatedUser = await User.findById(id).select("-password");
+    const updatedUser = await User.findById(id).select("-password").lean();
 
     res.status(200).json(new ApiResponse(200, updatedUser, "Profile updated successfully"));
   } catch (error) {
@@ -284,7 +284,8 @@ const getAllUsers = async (req, res) => {
   try {
     const users = await User.find({ isDeleted: false })
       .select("-password")
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .lean();
     res.status(200).json(new ApiResponse(200, users, "Users fetched successfully"));
   } catch (error) {
     res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));
