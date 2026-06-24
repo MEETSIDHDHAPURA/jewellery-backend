@@ -25,7 +25,7 @@ const formatCartResponse = (cart) => {
 
   if (cartObj.items && Array.isArray(cartObj.items)) {
     cartObj.items = cartObj.items.map((item) => {
-      const isLooseDiamond = item.metal === "—" || item.diamond || item.shape;
+      const isLooseDiamond = item.metal === "-" || item.diamond || item.shape;
       if (isLooseDiamond && !item.diamond) {
         item.diamond = {
           _id: item._id,
@@ -146,7 +146,7 @@ const recalculateCartDiscount = async (cart) => {
   if (cart.items && cart.items.length > 0) {
     const needsProductPopulate = cart.items.some(item => item.product && mongoose.Types.ObjectId.isValid(item.product) && !item.product.category);
     const needsDiamondPopulate = cart.items.some(item => item.diamond && mongoose.Types.ObjectId.isValid(item.diamond) && typeof item.diamond.shape === 'undefined');
-    
+
     const populatePaths = [];
     if (needsProductPopulate) {
       populatePaths.push({ path: "items.product", populate: { path: "category" } });
@@ -167,7 +167,7 @@ const recalculateCartDiscount = async (cart) => {
     const applicableCatStrings = coupon.applicableCategories.map((c) => c.toString());
 
     applicableItems = cart.items.filter((item) => {
-      const isItemLooseDiamond = item.metal === "—" || item.diamond || item.shape;
+      const isItemLooseDiamond = item.metal === "-" || item.diamond || item.shape;
       if (isItemLooseDiamond) {
         if (applicableCatStrings.includes("diamond")) {
           if (coupon.applicableShapes && coupon.applicableShapes.length > 0 && !coupon.applicableShapes.includes("all")) {
@@ -241,7 +241,7 @@ const getCart = async (req, res) => {
   try {
     const userId = getUserId(req);
     let cart = await Cart.findOne({ user: userId }).populate({ path: "items.product", populate: { path: "category" } }).populate("items.diamond");
-    
+
     if (!cart) {
       cart = await Cart.create({ user: userId, items: [] });
     } else {
@@ -251,7 +251,7 @@ const getCart = async (req, res) => {
       // Refetch with populated details
       cart = await Cart.findById(cart._id).populate({ path: "items.product", populate: { path: "category" } }).populate("items.diamond");
     }
-    
+
     res.status(200).json(new ApiResponse(200, formatCartResponse(cart), "Cart fetched successfully"));
   } catch (error) {
     res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));
@@ -279,7 +279,7 @@ const addToCart = async (req, res) => {
 
     const diamondShapes = ["Round", "Oval", "Cushion", "Princess", "Pear", "Radiant", "Emerald", "Marquise", "Heart", "Asscher"];
     const isGenericShape = typeof product === "string" && diamondShapes.includes(product);
-    const isMetalEmpty = metal === "—";
+    const isMetalEmpty = metal === "-";
     const isLooseDiamond = isGenericShape || isMetalEmpty || (diamond && mongoose.Types.ObjectId.isValid(diamond));
 
     if (isLooseDiamond) {
@@ -296,13 +296,13 @@ const addToCart = async (req, res) => {
 
       // Check if this loose diamond (specific or generic) is already in the cart
       const existingItemIndex = cart.items.findIndex((item) => {
-        const isItemLooseDiamond = item.metal === "—" || item.diamond || item.shape;
+        const isItemLooseDiamond = item.metal === "-" || item.diamond || item.shape;
         if (!isItemLooseDiamond) return false;
 
         if (cartDiamond && item.diamond) {
           return item.diamond.toString() === cartDiamond.toString();
         }
-        
+
         if (!cartDiamond && !item.diamond) {
           const itemShape = item.shape || item.product;
           return (
@@ -325,7 +325,7 @@ const addToCart = async (req, res) => {
           product: null,
           diamond: cartDiamond,
           shape: cartShape,
-          metal: metal || "—",
+          metal: metal || "-",
           carat,
           clarity,
           color,
@@ -375,7 +375,7 @@ const addToCart = async (req, res) => {
 
     await recalculateCartDiscount(cart);
     await cart.save();
-    
+
     // Return the populated cart
     const populatedCart = await Cart.findById(cart._id).populate({ path: "items.product", populate: { path: "category" } }).populate("items.diamond");
     res.status(200).json(new ApiResponse(200, formatCartResponse(populatedCart), "Item added to cart successfully"));
@@ -458,7 +458,7 @@ const clearCart = async (req, res) => {
   try {
     const userId = getUserId(req);
     const cart = await Cart.findOne({ user: userId });
-    
+
     if (cart) {
       cart.items = [];
       cart.couponCode = null;
@@ -543,7 +543,7 @@ const applyCoupon = async (req, res) => {
     if (coupon.applicableCategories && coupon.applicableCategories.length > 0 && !coupon.applicableCategories.includes("all")) {
       const applicableCatStrings = coupon.applicableCategories.map((c) => c.toString());
       const hasMatchingCategory = cart.items.some((item) => {
-        const isItemLooseDiamond = item.metal === "—" || item.diamond || item.shape;
+        const isItemLooseDiamond = item.metal === "-" || item.diamond || item.shape;
         if (isItemLooseDiamond) {
           if (applicableCatStrings.includes("diamond")) {
             if (coupon.applicableShapes && coupon.applicableShapes.length > 0 && !coupon.applicableShapes.includes("all")) {
@@ -590,7 +590,7 @@ const applyCoupon = async (req, res) => {
       }
     }
 
-    // All checks passed — apply coupon
+    // All checks passed - apply coupon
     cart.couponCode = coupon.code;
 
     // Re-fetch un-populated cart for saving
@@ -610,7 +610,7 @@ const applyCoupon = async (req, res) => {
 const removeCoupon = async (req, res) => {
   try {
     const userId = getUserId(req);
-    
+
     const cart = await Cart.findOne({ user: userId });
     if (!cart) {
       throw new ApiError(404, "Cart not found");

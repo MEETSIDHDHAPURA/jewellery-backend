@@ -191,7 +191,7 @@ const seedDefaults = async (req, res) => {
         { category: catId, attributeType: "carat", value: "1.50ct", label: "1.50 Carat", modifierType: "multiplier", modifierValue: 18.0, sortOrder: 6 },
         { category: catId, attributeType: "carat", value: "2.00ct", label: "2.00 Carat", modifierType: "multiplier", modifierValue: 32.0, sortOrder: 7 },
 
-        // ===== CLARITY (flat_add — $5 reduction per step from IF) =====
+        // ===== CLARITY (flat_add - $5 reduction per step from IF) =====
         { category: catId, attributeType: "clarity", value: "IF", label: "IF (Internally Flawless)", modifierType: "flat_add", modifierValue: 0, sortOrder: 1 },
         { category: catId, attributeType: "clarity", value: "VVS1", label: "VVS1", modifierType: "flat_add", modifierValue: -5, sortOrder: 2 },
         { category: catId, attributeType: "clarity", value: "VVS2", label: "VVS2", modifierType: "flat_add", modifierValue: -10, sortOrder: 3 },
@@ -200,7 +200,7 @@ const seedDefaults = async (req, res) => {
         { category: catId, attributeType: "clarity", value: "SI1", label: "SI1", modifierType: "flat_add", modifierValue: -25, sortOrder: 6 },
         { category: catId, attributeType: "clarity", value: "SI2", label: "SI2", modifierType: "flat_add", modifierValue: -30, sortOrder: 7 },
 
-        // ===== COLOR (flat_add — $5 reduction per step from D) =====
+        // ===== COLOR (flat_add - $5 reduction per step from D) =====
         { category: catId, attributeType: "color", value: "D", label: "D (Colorless)", modifierType: "flat_add", modifierValue: 0, sortOrder: 1 },
         { category: catId, attributeType: "color", value: "E", label: "E (Colorless)", modifierType: "flat_add", modifierValue: -5, sortOrder: 2 },
         { category: catId, attributeType: "color", value: "F", label: "F (Colorless)", modifierType: "flat_add", modifierValue: -10, sortOrder: 3 },
@@ -263,23 +263,23 @@ const parseMetalSelection = (value) => {
   if (val.includes("platinum")) {
     return { purity: "PT950", metal: "Platinum" };
   }
-  
+
   // Gold cases
   const purities = ["10K", "14K", "18K", "20K", "22K", "24K"];
   const purity = purities.find(p => value.includes(p)) || "18K";
-  
+
   let metal = "Yellow Gold";
   if (val.includes("white")) {
     metal = "White Gold";
   } else if (val.includes("rose")) {
     metal = "Rose Gold";
   }
-  
+
   return { purity, metal };
 };
 
 /**
- * Calculate Price — BOM-based validation endpoint
+ * Calculate Price - BOM-based validation endpoint
  */
 const calculatePrice = async (req, res) => {
   try {
@@ -313,7 +313,7 @@ const calculatePrice = async (req, res) => {
 
     const pBasePrice = prod ? (prod.basePrice || 0) : (Number(basePrice) || 0);
     const pSilverBasePrice = prod ? (prod.silverBasePrice || 0) : (Number(silverBasePrice) || 0);
-    
+
     const selectedMetalVal = selections.metal || "";
     const isSilver = selectedMetalVal.toLowerCase().includes("silver");
     const isPlatinum = selectedMetalVal.toLowerCase().includes("platinum");
@@ -372,7 +372,7 @@ const calculatePrice = async (req, res) => {
     }
     const metalCost = pWeight * metalPricePerGram;
 
-    // 2. Calculate Making Cost — fetched from MakingCharge collection
+    // 2. Calculate Making Cost - fetched from MakingCharge collection
     let makingCostRate = 0;
     if (selectedMetalVal) {
       let searchMetal = "Yellow Gold";
@@ -387,7 +387,7 @@ const calculatePrice = async (req, res) => {
     }
     const makingCost = pWeight * makingCostRate;
 
-    // 3. Calculate Diamond Base Cost (match by CARAT only — color/clarity handled via modifiers)
+    // 3. Calculate Diamond Base Cost (match by CARAT only - color/clarity handled via modifiers)
     let diamondCost = 0;
     const selectedCarat = selections.carat || "";
     const selectedClarity = selections.clarity || "";
@@ -449,7 +449,7 @@ const calculatePrice = async (req, res) => {
 
     // 7. Compute totals
     const subTotal = metalCost + makingCost + diamondCost + colorModifier + clarityModifier + sizeModifier;
-    
+
     const marginConfig = await GlobalConfig.findOne({ key: "margin_percentage" });
     const margin = marginConfig ? marginConfig.value : 0;
     const marginAmount = subTotal * (margin / 100);
