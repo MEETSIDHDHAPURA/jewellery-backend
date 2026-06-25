@@ -101,6 +101,20 @@ const couponSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    capturedEmails: [
+      {
+        email: {
+          type: String,
+          required: true,
+          trim: true,
+          lowercase: true,
+        },
+        createdAt: {
+          type: Date,
+          default: Date.now,
+        },
+      },
+    ],
   },
   { timestamps: true }
 );

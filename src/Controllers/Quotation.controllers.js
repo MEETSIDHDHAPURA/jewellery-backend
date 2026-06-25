@@ -55,8 +55,15 @@ const createQuotation = async (req, res) => {
       }
     } else {
       // Auto generate if not sent
-      const count = await Quotation.countDocuments();
-      finalId = `QT-${new Date().getFullYear()}-${String(count + 1).padStart(3, "0")}`;
+      let isUnique = false;
+      while (!isUnique) {
+        const rand = Math.floor(1000000 + Math.random() * 9000000);
+        finalId = `QU-${rand}`;
+        const existing = await Quotation.findOne({ id: finalId }).select("_id").lean();
+        if (!existing) {
+          isUnique = true;
+        }
+      }
     }
 
     const quotation = await Quotation.create({
@@ -104,7 +111,20 @@ const createQuotation = async (req, res) => {
 // Get All Quotations
 const getAllQuotations = async (req, res) => {
   try {
-    const quotations = await Quotation.find().sort({ createdAt: -1 }).lean();
+    const { search } = req.query;
+    let query = {};
+    if (search) {
+      const isMongoId = mongoose.Types.ObjectId.isValid(search);
+      query = {
+        $or: [
+          { customerName: { $regex: search, $options: "i" } },
+          { id: { $regex: search, $options: "i" } },
+          { metalType: { $regex: search, $options: "i" } },
+          ...(isMongoId ? [{ _id: search }] : [])
+        ]
+      };
+    }
+    const quotations = await Quotation.find(query).sort({ createdAt: -1 }).lean();
     res.status(200).json(new ApiResponse(200, quotations, "Quotations fetched successfully"));
   } catch (error) {
     res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));

@@ -230,19 +230,24 @@ const createProduct = async (req, res) => {
       settingType, backingType
     } = req.body;
 
-    let sizeChart = "";
-    let certificateFiles = [];
-    let metalImages = {
+    let metalImages = typeof req.body.metalImages === "string" ? safeParseJSON(req.body.metalImages, {
       yellowGold: [],
       whiteGold: [],
       roseGold: [],
       silver: [],
       platinum: []
-    };
+    }) : (req.body.metalImages || {
+      yellowGold: [],
+      whiteGold: [],
+      roseGold: [],
+      silver: [],
+      platinum: []
+    });
 
-    // --- PHASE 1: Slug check + Image uploads run in PARALLEL ---
-    // Slug doesn't depend on images, so start both at once
+    let sizeChart = req.body.sizeChart || "";
+    let certificateFiles = typeof certificate === "string" ? safeParseJSON(certificate, []) : (certificate || []);
 
+    // --- PHASE 1: Slug check + Category lookup in PARALLEL ---
     // Prepare slug check promise
     let finalSlug = slug;
     let slugPromise = Promise.resolve();
@@ -265,52 +270,13 @@ const createProduct = async (req, res) => {
         .replace(/(^-|-$)+/g, "");
     }
 
-    // Prepare image upload promises
-    let imagePromise = Promise.resolve();
-    if (req.files) {
-      const metalUploadMap = {
-        images_yellowGold: "yellowGold",
-        images_whiteGold: "whiteGold",
-        images_roseGold: "roseGold",
-        images_silver: "silver",
-        images_platinum: "platinum"
-      };
-
-      const metalUploadPromises = Object.entries(metalUploadMap)
-        .filter(([fileKey]) => req.files[fileKey])
-        .map(async ([fileKey, metalKey]) => {
-          const urls = await uploadFilesParallel(req.files[fileKey], uploadOnCloudinary);
-          metalImages[metalKey] = urls;
-        });
-
-      // Upload sizeChart and certificate in parallel with metal images
-      const miscUploads = [];
-      if (req.files.sizeChart) {
-        miscUploads.push(
-          uploadOnCloudinary(req.files.sizeChart[0].path).then(uploadRes => {
-            fs.unlink(req.files.sizeChart[0].path, () => { });
-            if (uploadRes) sizeChart = uploadRes.secure_url;
-          })
-        );
-      }
-      if (req.files.certificate) {
-        miscUploads.push(
-          uploadFilesParallel(req.files.certificate, uploadOnCloudinary).then(urls => {
-            certificateFiles = urls.filter(Boolean);
-          })
-        );
-      }
-
-      imagePromise = Promise.all([...metalUploadPromises, ...miscUploads]);
-    }
-
     // Fetch category name once (reused for SKU generation to avoid duplicate query)
     const categoryNamePromise = category
       ? Category.findById(category).select("name").lean()
       : Promise.resolve(null);
 
-    // Run slug check + image uploads + category lookup in parallel
-    const [, , categoryDoc] = await Promise.all([slugPromise, imagePromise, categoryNamePromise]);
+    // Run slug check + category lookup in parallel
+    const [, categoryDoc] = await Promise.all([slugPromise, categoryNamePromise]);
     const categoryNameHint = categoryDoc && categoryDoc.name ? categoryDoc.name : null;
 
     // 1. Create Base Product
@@ -747,7 +713,7 @@ const updateProduct = async (req, res) => {
     const jsonFields = new Set([
       "diamondOptions", "occasion", "variants",
       "allowedMetals", "allowedCarats", "allowedClarities",
-      "allowedColors", "allowedSizes", "keywords"
+      "allowedColors", "allowedSizes", "keywords", "metalImages", "certificate"
     ]);
 
     // 2. Number fields parsing
@@ -798,80 +764,8 @@ const updateProduct = async (req, res) => {
       });
     }
 
-    let finalMetalImages = {
-      yellowGold: [],
-      whiteGold: [],
-      roseGold: [],
-      silver: [],
-      platinum: []
-    };
-
-    if (rawBody.existingMetalImages) {
-      const existingMetal = safeParseJSON(rawBody.existingMetalImages, {});
-      finalMetalImages.yellowGold = existingMetal.yellowGold || [];
-      finalMetalImages.whiteGold = existingMetal.whiteGold || [];
-      finalMetalImages.roseGold = existingMetal.roseGold || [];
-      finalMetalImages.silver = existingMetal.silver || [];
-      finalMetalImages.platinum = existingMetal.platinum || [];
-    } else if (existing.metalImages) {
-      finalMetalImages.yellowGold = existing.metalImages.yellowGold || [];
-      finalMetalImages.whiteGold = existing.metalImages.whiteGold || [];
-      finalMetalImages.roseGold = existing.metalImages.roseGold || [];
-      finalMetalImages.silver = existing.metalImages.silver || [];
-      finalMetalImages.platinum = existing.metalImages.platinum || [];
-    }
-
-    let finalCertificates = [];
-    if (rawBody.existingCertificate) {
-      finalCertificates = safeParseJSON(rawBody.existingCertificate, []);
-    } else if (existing.certificate) {
-      finalCertificates = Array.isArray(existing.certificate) ? existing.certificate : (existing.certificate ? [existing.certificate] : []);
-    }
-
-    // Prepare image upload promise
-    let imagePromise = Promise.resolve();
-    if (req.files) {
-      const metalUploadMap = {
-        images_yellowGold: "yellowGold",
-        images_whiteGold: "whiteGold",
-        images_roseGold: "roseGold",
-        images_silver: "silver",
-        images_platinum: "platinum"
-      };
-
-      const metalUploadPromises = Object.entries(metalUploadMap)
-        .filter(([fileKey]) => req.files[fileKey])
-        .map(async ([fileKey, metalKey]) => {
-          const urls = await uploadFilesParallel(req.files[fileKey], uploadOnCloudinary);
-          finalMetalImages[metalKey].push(...urls);
-        });
-
-      // Upload sizeChart and certificate in parallel with metal images
-      const miscUploads = [];
-      if (req.files.sizeChart) {
-        miscUploads.push(
-          updateOnCloudinary(existing.sizeChart, req.files.sizeChart[0].path).then(uploadRes => {
-            fs.unlink(req.files.sizeChart[0].path, () => { });
-            if (uploadRes) updateData.sizeChart = uploadRes.secure_url;
-          })
-        );
-      }
-      if (req.files.certificate) {
-        miscUploads.push(
-          uploadFilesParallel(req.files.certificate, uploadOnCloudinary).then(urls => {
-            finalCertificates.push(...urls.filter(Boolean));
-          })
-        );
-      }
-
-      imagePromise = Promise.all([...metalUploadPromises, ...miscUploads]);
-    }
-
-    // Run slug check + image uploads in PARALLEL
-    await Promise.all([slugPromise, imagePromise]);
-
-    updateData.metalImages = finalMetalImages;
-    updateData.certificate = finalCertificates;
+    // Run slug check
+    await slugPromise;
 
     // Enforce isNew logic: within 30 days of creation, isNew must remain false in the DB to dynamically evaluate as true.
     const isWithin30Days = existing.createdAt ? (Date.now() - new Date(existing.createdAt).getTime()) < 30 * 24 * 60 * 60 * 1000 : false;
@@ -1350,6 +1244,45 @@ const globalSearch = async (req, res) => {
   }
 };
 
+/**
+ * Upload Product Media (Images and Videos)
+ */
+const uploadProductMedia = async (req, res) => {
+  try {
+    let uploadedUrls = [];
+
+    // If multiple files are uploaded under 'files'
+    if (req.files && Array.isArray(req.files)) {
+      uploadedUrls = await uploadFilesParallel(req.files, uploadOnCloudinary);
+    } 
+    // If a single file is uploaded under 'file'
+    else if (req.file) {
+      const uploadRes = await uploadOnCloudinary(req.file.path);
+      // Clean up temp file
+      fs.unlink(req.file.path, () => {});
+      if (uploadRes) {
+        uploadedUrls.push(uploadRes.secure_url);
+      }
+    } 
+    // If files are sent as key-value fields in req.files (e.g. from an array upload with any key)
+    else if (req.files && typeof req.files === "object") {
+      const allFiles = Object.values(req.files).flat();
+      uploadedUrls = await uploadFilesParallel(allFiles, uploadOnCloudinary);
+    }
+
+    if (uploadedUrls.length === 0) {
+      throw new ApiError(400, "No files uploaded or file upload failed");
+    }
+
+    // Return the URLs of uploaded media
+    res.status(200).json(
+      new ApiResponse(200, { urls: uploadedUrls }, "Media uploaded successfully")
+    );
+  } catch (error) {
+    res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));
+  }
+};
+
 module.exports = {
   createProduct,
   getAllProducts,
@@ -1359,6 +1292,7 @@ module.exports = {
   bulkCreateProducts,
   getRelatedProducts,
   globalSearch,
+  uploadProductMedia,
 };
 
 

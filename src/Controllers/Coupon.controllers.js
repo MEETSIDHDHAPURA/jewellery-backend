@@ -490,6 +490,7 @@ const getCouponReport = async (req, res) => {
             totalOrderRevenue: stats.totalOrderRevenue,
             uniqueCustomerCount: stats.uniqueCustomers.length,
             remainingUses: coupon.usageLimit - coupon.usedCount,
+            capturedEmails: couponDoc.capturedEmails || [],
           },
           recentUsages,
         },
@@ -531,6 +532,18 @@ const sendCouponEmail = async (req, res) => {
     const coupon = await Coupon.findById(couponId);
     if (!coupon || !coupon.isActive) {
       throw new ApiError(404, "Coupon not found or inactive");
+    }
+
+    // Track captured email (avoiding duplicates)
+    if (!coupon.capturedEmails) {
+      coupon.capturedEmails = [];
+    }
+    const isEmailTracked = coupon.capturedEmails.some(
+      (item) => item.email.toLowerCase() === email.toLowerCase()
+    );
+    if (!isEmailTracked) {
+      coupon.capturedEmails.push({ email });
+      await coupon.save();
     }
 
     const discountText = coupon.discountType === "Percentage" 
