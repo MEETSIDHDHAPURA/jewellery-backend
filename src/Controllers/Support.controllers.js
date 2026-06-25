@@ -89,7 +89,7 @@ exports.getAllTickets = async (req, res) => {
 // Create a new support ticket
 exports.createTicket = async (req, res) => {
   try {
-    const { name, email, phone, subject, message } = req.body;
+    const { name, email, phone, countryCode, subject, message } = req.body;
 
     if (!name || !email || !phone || !subject || !message) {
       return res.status(400).json({
@@ -104,6 +104,7 @@ exports.createTicket = async (req, res) => {
       name,
       email,
       phone: normalizedPhone,
+      countryCode: countryCode || "",
       subject,
       message,
     });

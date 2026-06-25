@@ -12,6 +12,11 @@ const customDesignSchema = new mongoose.Schema(
       required: true,
       trim: true,
     },
+    countryCode: {
+      type: String,
+      default: "",
+      trim: true,
+    },
     email: {
       type: String,
       required: true,

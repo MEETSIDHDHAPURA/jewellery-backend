@@ -95,6 +95,7 @@ exports.createCustomDesign = async (req, res) => {
     const {
       name,
       phone,
+      countryCode,
       email,
       jewelryType,
       stylePreference,
@@ -137,6 +138,7 @@ exports.createCustomDesign = async (req, res) => {
     const newDesign = await CustomDesign.create({
       name,
       phone: typeof phone === "string" ? phone.trim() : "",
+      countryCode: countryCode || "",
       email,
       jewelryType,
       stylePreference,

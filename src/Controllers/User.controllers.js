@@ -10,7 +10,7 @@ const { uploadOnCloudinary, updateOnCloudinary } = require("../Utils/Cloudinary"
 // Register User
 const registerUser = async (req, res) => {
   try {
-    const { name, email, password, phone } = req.body;
+    const { name, email, password, phone, countryCode } = req.body;
 
     if (!name || !email || !password) {
       throw new ApiError(400, "Name, Email and Password are required");
@@ -32,6 +32,7 @@ const registerUser = async (req, res) => {
       existingUser.name = name;
       existingUser.password = hashedPassword;
       existingUser.phone = phone;
+      existingUser.countryCode = countryCode;
       existingUser.otp = otp;
       existingUser.otpExpire = otpExpire;
       user = await existingUser.save();
@@ -41,6 +42,7 @@ const registerUser = async (req, res) => {
         email,
         password: hashedPassword,
         phone,
+        countryCode,
         otp,
         otpExpire,
         isVerified: false,
@@ -198,7 +200,7 @@ const getUserProfile = async (req, res) => {
 const updateUserProfile = async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, phone, addresses, isActive, role } = req.body;
+    const { name, phone, countryCode, addresses, isActive, role } = req.body;
 
     // Ensure requesting user is updating their own profile or is an admin
     const isAdmin = req.user?.role === "admin" || req.user?.role === "SuperAdmin";
@@ -211,6 +213,7 @@ const updateUserProfile = async (req, res) => {
 
     if (name) user.name = name;
     if (phone) user.phone = phone;
+    if (countryCode !== undefined) user.countryCode = countryCode;
     if (addresses) user.addresses = addresses;
     
     // Role-based field updates protection (Privilege Escalation protection)

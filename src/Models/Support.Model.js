@@ -17,6 +17,11 @@ const supportSchema = new mongoose.Schema(
       required: true,
       trim: true,
     },
+    countryCode: {
+      type: String,
+      default: "",
+      trim: true,
+    },
     subject: {
       type: String,
       required: true,
