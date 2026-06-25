@@ -209,6 +209,41 @@ const getDiamondPrices = async (req, res) => {
       filter.$or = searchConditions;
     }
 
+    // Support certificates (IGI, GIA, NON)
+    const certificateInput = req.query.certificates || req.query.certificate;
+    if (certificateInput && certificateInput !== "all") {
+      const certArr = Array.isArray(certificateInput) 
+        ? certificateInput 
+        : (typeof certificateInput === 'string' ? certificateInput.split(',') : [certificateInput]);
+      const cleanCerts = certArr.map(c => c.trim().toLowerCase()).filter(Boolean);
+      
+      if (cleanCerts.length > 0) {
+        const certConditions = [];
+        if (cleanCerts.includes("igi")) {
+          certConditions.push({ igi: { $ne: null, $exists: true, $ne: "" } });
+        }
+        if (cleanCerts.includes("gia")) {
+          certConditions.push({ gia: { $ne: null, $exists: true, $ne: "" } });
+        }
+        if (cleanCerts.includes("non")) {
+          certConditions.push({ non: { $ne: null, $exists: true, $ne: "" } });
+        }
+        
+        if (certConditions.length > 0) {
+          if (filter.$or) {
+            const searchOr = filter.$or;
+            delete filter.$or;
+            filter.$and = [
+              { $or: searchOr },
+              { $or: certConditions }
+            ];
+          } else {
+            filter.$or = certConditions;
+          }
+        }
+      }
+    }
+
     // Validate & clamp pagination parameters
     const page = Math.max(1, parseInt(req.query.page, 10) || 1);
     const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 20));

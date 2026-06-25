@@ -1196,7 +1196,7 @@ const getRelatedProducts = async (req, res) => {
       throw new ApiError(400, "Invalid product ID");
     }
 
-    const product = await Product.findById(id).select("category subCategory occasion gender").lean();
+    const product = await Product.findById(id).select("category subCategory occasion gender isActive isDeleted").lean();
     if (!product || product.isDeleted || !product.isActive) {
       throw new ApiError(404, "Product not found");
     }
