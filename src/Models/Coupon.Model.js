@@ -90,14 +90,16 @@ const couponSchema = new mongoose.Schema(
       default: true,
     },
 
-    // ─── Exit Intent & Welcome Capture ───
+    // ─── Image ───
+    image: {
+      type: String,
+      default: "",
+    },
+
+    // ─── Email Capture (Popup) ───
     sendOnRegistration: {
       type: Boolean,
       default: false,
-    },
-    registrationDelay: {
-      type: Number, // delay in minutes
-      default: 0,
     },
   },
   { timestamps: true }

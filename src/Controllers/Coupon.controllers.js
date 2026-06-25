@@ -2,9 +2,11 @@ const Coupon = require("../Models/Coupon.Model");
 const CouponUsage = require("../Models/CouponUsage.Model");
 const ApiResponse = require("../Utils/ApiResponse");
 const ApiError = require("../Utils/ApiError");
+const sendMail = require("../Utils/Nodemailer");
 const logActivity = require("../Utils/logActivity");
 const mongoose = require("mongoose");
 const Category = require("../Models/Category.Model");
+const { uploadOnCloudinary, updateOnCloudinary, deleteFromCloudinary } = require("../Utils/Cloudinary");
 
 // Helper to manually populate applicableCategories (supporting mixed ObjectId and custom strings like 'diamond')
 const populateCouponCategories = async (coupons) => {
@@ -71,7 +73,6 @@ const createCoupon = async (req, res) => {
       country,
       province,
       sendOnRegistration,
-      registrationDelay,
     } = req.body;
 
     if (!code || !discountType || discountValue === undefined || !expiryDate) {
@@ -80,6 +81,15 @@ const createCoupon = async (req, res) => {
 
     const existing = await Coupon.findOne({ code: code.toUpperCase() });
     if (existing) throw new ApiError(409, "Coupon code already exists");
+
+    // Handle image upload
+    let imageUrl = "";
+    if (req.file) {
+      const uploadRes = await uploadOnCloudinary(req.file.path);
+      if (uploadRes) {
+        imageUrl = uploadRes.secure_url;
+      }
+    }
 
     const coupon = await Coupon.create({
       code: code.toUpperCase(),
@@ -97,8 +107,8 @@ const createCoupon = async (req, res) => {
       applicableShapes: applicableCategories?.includes("diamond") ? applicableShapes || [] : [],
       country: country || "all",
       province: country === "USA" ? province || "" : "",
-      sendOnRegistration: sendOnRegistration || false,
-      registrationDelay: registrationDelay || 0,
+      sendOnRegistration: sendOnRegistration === "true" || sendOnRegistration === true,
+      image: imageUrl,
     });
 
     await logActivity(req, "Create", `create coupon ${coupon.code}`);
@@ -116,6 +126,14 @@ const updateCoupon = async (req, res) => {
 
     const coupon = await Coupon.findById(id);
     if (!coupon) throw new ApiError(404, "Coupon not found");
+
+    // Handle image upload
+    if (req.file) {
+      const uploadRes = await updateOnCloudinary(coupon.image, req.file.path);
+      if (uploadRes) {
+        coupon.image = uploadRes.secure_url;
+      }
+    }
 
     // Allowed updatable fields
     const updatableFields = [
@@ -136,7 +154,6 @@ const updateCoupon = async (req, res) => {
       "country",
       "province",
       "sendOnRegistration",
-      "registrationDelay",
     ];
 
     const originalCode = coupon.code;
@@ -151,6 +168,9 @@ const updateCoupon = async (req, res) => {
           });
           if (existingCode) throw new ApiError(409, "Coupon code already exists");
           coupon.code = req.body.code.toUpperCase();
+        } else if (field === "sendOnRegistration" || field === "isActive") {
+          // Handle boolean conversion from FormData strings
+          coupon[field] = req.body[field] === "true" || req.body[field] === true;
         } else {
           coupon[field] = req.body[field];
         }
@@ -185,8 +205,15 @@ const deleteCoupon = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const coupon = await Coupon.findByIdAndDelete(id);
+    const coupon = await Coupon.findById(id);
     if (!coupon) throw new ApiError(404, "Coupon not found");
+
+    // Clean up image from Cloudinary
+    if (coupon.image) {
+      await deleteFromCloudinary(coupon.image);
+    }
+
+    await Coupon.findByIdAndDelete(id);
 
     await logActivity(req, "Delete", `Delete this coupon ${coupon.code}`);
 
@@ -474,6 +501,214 @@ const getCouponReport = async (req, res) => {
   }
 };
 
+// ─── Get Active Popup Coupon ───
+const getPopupCoupon = async (req, res) => {
+  try {
+    const coupon = await Coupon.findOne({
+      isActive: true,
+      sendOnRegistration: true,
+      expiryDate: { $gt: new Date() },
+    }).select("discountType discountValue description image");
+
+    if (!coupon) {
+      return res.status(200).json(new ApiResponse(200, null, "No active popup coupon found"));
+    }
+
+    res.status(200).json(new ApiResponse(200, coupon, "Popup coupon fetched successfully"));
+  } catch (error) {
+    res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));
+  }
+};
+
+// ─── Send Coupon Code via Email ───
+const sendCouponEmail = async (req, res) => {
+  try {
+    const { email, couponId } = req.body;
+    if (!email || !couponId) {
+      throw new ApiError(400, "Email and couponId are required");
+    }
+
+    const coupon = await Coupon.findById(couponId);
+    if (!coupon || !coupon.isActive) {
+      throw new ApiError(404, "Coupon not found or inactive");
+    }
+
+    const discountText = coupon.discountType === "Percentage" 
+      ? `${coupon.discountValue}%` 
+      : coupon.discountType === "Fixed" 
+        ? `$${coupon.discountValue}` 
+        : "Free Shipping";
+
+    const storeName = process.env.STORE_NAME || "Praya Diamonds";
+    const expiryDate = new Date(coupon.expiryDate).toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    });
+
+    // Build coupon image section if image exists
+    const imageSection = coupon.image
+      ? `<tr>
+           <td style="padding: 0;">
+             <img src="${coupon.image}" alt="Special Offer" style="width: 100%; max-height: 280px; object-fit: cover; display: block; border-radius: 12px 12px 0 0;" />
+           </td>
+         </tr>`
+      : "";
+
+    // Adjust top border radius if image is present
+    const containerTopRadius = coupon.image ? "0" : "12px";
+
+    const emailHtml = `
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8" />
+      <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+      <title>Your Exclusive Coupon</title>
+    </head>
+    <body style="margin: 0; padding: 0; background-color: #f5f1eb; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;">
+      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: #f5f1eb; padding: 40px 20px;">
+        <tr>
+          <td align="center">
+            <table role="presentation" width="600" cellspacing="0" cellpadding="0" style="max-width: 600px; width: 100%; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 24px rgba(0,0,0,0.08);">
+              
+              <!-- Coupon Image -->
+              ${imageSection}
+
+              <!-- Main Content -->
+              <tr>
+                <td style="background-color: #ffffff; padding: 40px 36px 20px; border-radius: ${containerTopRadius} ${containerTopRadius} 0 0;">
+                  
+                  <!-- Store Name -->
+                  <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+                    <tr>
+                      <td align="center" style="padding-bottom: 8px;">
+                        <span style="font-size: 11px; letter-spacing: 3px; text-transform: uppercase; color: #d4af37; font-weight: 600;">
+                          ${storeName}
+                        </span>
+                      </td>
+                    </tr>
+                  </table>
+
+                  <!-- Heading -->
+                  <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+                    <tr>
+                      <td align="center" style="padding-bottom: 6px;">
+                        <h1 style="margin: 0; font-family: Georgia, 'Times New Roman', serif; font-size: 28px; font-weight: 400; color: #1a1a1a; line-height: 1.3;">
+                          Your Exclusive Gift Awaits
+                        </h1>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td align="center" style="padding-bottom: 24px;">
+                        <div style="width: 40px; height: 2px; background-color: #d4af37; margin: 0 auto;"></div>
+                      </td>
+                    </tr>
+                  </table>
+
+                  <!-- Greeting -->
+                  <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+                    <tr>
+                      <td style="font-size: 15px; color: #555555; line-height: 1.7; text-align: center; padding-bottom: 28px;">
+                        Thank you for your interest in ${storeName}! As promised, here is your exclusive <strong>${discountText} discount</strong> coupon. Use it on your next purchase to enjoy premium jewelry at a special price.
+                      </td>
+                    </tr>
+                  </table>
+
+                  <!-- Discount Badge -->
+                  <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+                    <tr>
+                      <td align="center" style="padding-bottom: 20px;">
+                        <div style="background: linear-gradient(135deg, #d4af37 0%, #f0d875 50%, #d4af37 100%); color: #1a1a1a; font-size: 32px; font-weight: 800; letter-spacing: 1px; padding: 18px 40px; border-radius: 50px; display: inline-block; text-align: center; box-shadow: 0 4px 16px rgba(212,175,55,0.3);">
+                          ${discountText} OFF
+                        </div>
+                      </td>
+                    </tr>
+                  </table>
+
+                  <!-- Coupon Code Box -->
+                  <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+                    <tr>
+                      <td align="center" style="padding-bottom: 12px;">
+                        <table role="presentation" cellspacing="0" cellpadding="0" style="background-color: #fdfaf3; border: 2px dashed #d4af37; border-radius: 10px; min-width: 280px;">
+                          <tr>
+                            <td style="padding: 18px 36px; text-align: center;">
+                              <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 2px; color: #999; margin-bottom: 6px;">Your Coupon Code</div>
+                              <div style="font-family: 'Courier New', monospace; font-size: 28px; font-weight: 700; letter-spacing: 4px; color: #1a1a1a;">
+                                ${coupon.code}
+                              </div>
+                            </td>
+                          </tr>
+                        </table>
+                      </td>
+                    </tr>
+                  </table>
+
+                  <!-- Offer Description -->
+                  <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+                    <tr>
+                      <td align="center" style="padding: 8px 0 24px;">
+                        <span style="font-size: 14px; color: #777; font-style: italic;">
+                          ${coupon.description || "Exclusive discount on your next purchase"}
+                        </span>
+                      </td>
+                    </tr>
+                  </table>
+
+                </td>
+              </tr>
+
+              <!-- Divider + Expiry -->
+              <tr>
+                <td style="background-color: #ffffff; padding: 0 36px;">
+                  <div style="border-top: 1px solid #eee;"></div>
+                </td>
+              </tr>
+              <tr>
+                <td style="background-color: #ffffff; padding: 20px 36px 32px; text-align: center;">
+                  <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+                    <tr>
+                      <td align="center">
+                        <div style="background-color: #faf8f4; border-radius: 8px; padding: 14px 24px; display: inline-block;">
+                          <span style="font-size: 12px; color: #999; text-transform: uppercase; letter-spacing: 1px;">Valid Until</span>
+                          <br />
+                          <span style="font-size: 16px; color: #1a1a1a; font-weight: 600;">${expiryDate}</span>
+                        </div>
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+
+              <!-- Footer -->
+              <tr>
+                <td style="background-color: #1a1a1a; padding: 28px 36px; border-radius: 0 0 12px 12px; text-align: center;">
+                  <p style="margin: 0 0 6px; font-size: 13px; color: #d4af37; font-weight: 600; letter-spacing: 1px;">
+                    ${storeName}
+                  </p>
+                  <p style="margin: 0; font-size: 11px; color: #888; line-height: 1.6;">
+                    This is an automated email. Please do not reply directly.<br />
+                    &copy; ${new Date().getFullYear()} ${storeName}. All rights reserved.
+                  </p>
+                </td>
+              </tr>
+
+            </table>
+          </td>
+        </tr>
+      </table>
+    </body>
+    </html>
+    `;
+
+    await sendMail(email, `🎁 Your Exclusive ${discountText} Discount Coupon from ${storeName}!`, emailHtml);
+
+    res.status(200).json(new ApiResponse(200, null, "Coupon sent successfully"));
+  } catch (error) {
+    res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));
+  }
+};
+
 module.exports = {
   createCoupon,
   updateCoupon,
@@ -483,4 +718,6 @@ module.exports = {
   toggleCouponStatus,
   validateCoupon,
   getCouponReport,
+  getPopupCoupon,
+  sendCouponEmail,
 };

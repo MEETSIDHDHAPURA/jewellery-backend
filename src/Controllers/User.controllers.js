@@ -319,39 +319,7 @@ const verifyOTP = async (req, res) => {
     user.otpExpire = null;
     await user.save();
 
-    // Schedule welcome coupon if any active coupon is configured for sendOnRegistration
-    try {
-      const Coupon = require("../Models/Coupon.Model");
-      const DelayedCouponQueue = require("../Models/DelayedCouponQueue.Model");
 
-      const welcomeCoupon = await Coupon.findOne({
-        isActive: true,
-        sendOnRegistration: true,
-        expiryDate: { $gt: new Date() }
-      });
-
-      if (welcomeCoupon) {
-        const alreadyScheduled = await DelayedCouponQueue.exists({
-          user: user._id,
-          coupon: welcomeCoupon._id
-        });
-
-        if (!alreadyScheduled) {
-          const delayInMinutes = welcomeCoupon.registrationDelay || 0;
-          const scheduledTime = new Date(Date.now() + delayInMinutes * 60 * 1000);
-
-          await DelayedCouponQueue.create({
-            user: user._id,
-            email: user.email,
-            coupon: welcomeCoupon._id,
-            scheduledTime,
-            status: "pending"
-          });
-        }
-      }
-    } catch (err) {
-      console.error("Error scheduling welcome coupon:", err);
-    }
 
     const createdUser = await User.findById(user._id).select("-password -otp -otpExpire");
 
