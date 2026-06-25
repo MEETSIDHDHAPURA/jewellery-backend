@@ -231,7 +231,7 @@ const createProduct = async (req, res) => {
     } = req.body;
 
     let sizeChart = "";
-    let certificateFile = "";
+    let certificateFiles = [];
     let metalImages = {
       yellowGold: [],
       whiteGold: [],
@@ -253,9 +253,9 @@ const createProduct = async (req, res) => {
         .replace(/(^-|-$)+/g, "");
 
       const slugToCheck = finalSlug;
-      slugPromise = Product.exists({ slug: slugToCheck }).then(exists => {
+      slugPromise = Product.findOne({ slug: slugToCheck }).then(exists => {
         if (exists) {
-          finalSlug = `${slugToCheck}-${Math.random().toString(36).substring(2, 7)}`;
+          finalSlug = `${finalSlug}-${Math.random().toString(36).substring(2, 7)}`;
         }
       });
     } else if (finalSlug) {
@@ -295,9 +295,8 @@ const createProduct = async (req, res) => {
       }
       if (req.files.certificate) {
         miscUploads.push(
-          uploadOnCloudinary(req.files.certificate[0].path).then(uploadRes => {
-            fs.unlink(req.files.certificate[0].path, () => { });
-            if (uploadRes) certificateFile = uploadRes.secure_url;
+          uploadFilesParallel(req.files.certificate, uploadOnCloudinary).then(urls => {
+            certificateFiles = urls.filter(Boolean);
           })
         );
       }
@@ -325,7 +324,7 @@ const createProduct = async (req, res) => {
       makingChargeType: makingChargeType || "per_gram",
       metalImages,
       sizeChart,
-      certificate: certificateFile || certificate,
+      certificate: certificateFiles,
       diamondOptions: safeParseJSON(diamondOptions, []),
       occasion: safeParseJSON(occasion, []),
       gender: gender || "Women",
@@ -822,6 +821,13 @@ const updateProduct = async (req, res) => {
       finalMetalImages.platinum = existing.metalImages.platinum || [];
     }
 
+    let finalCertificates = [];
+    if (rawBody.existingCertificate) {
+      finalCertificates = safeParseJSON(rawBody.existingCertificate, []);
+    } else if (existing.certificate) {
+      finalCertificates = Array.isArray(existing.certificate) ? existing.certificate : (existing.certificate ? [existing.certificate] : []);
+    }
+
     // Prepare image upload promise
     let imagePromise = Promise.resolve();
     if (req.files) {
@@ -852,9 +858,8 @@ const updateProduct = async (req, res) => {
       }
       if (req.files.certificate) {
         miscUploads.push(
-          updateOnCloudinary(existing.certificate, req.files.certificate[0].path).then(uploadRes => {
-            fs.unlink(req.files.certificate[0].path, () => { });
-            if (uploadRes) updateData.certificate = uploadRes.secure_url;
+          uploadFilesParallel(req.files.certificate, uploadOnCloudinary).then(urls => {
+            finalCertificates.push(...urls.filter(Boolean));
           })
         );
       }
@@ -866,6 +871,7 @@ const updateProduct = async (req, res) => {
     await Promise.all([slugPromise, imagePromise]);
 
     updateData.metalImages = finalMetalImages;
+    updateData.certificate = finalCertificates;
 
     // Enforce isNew logic: within 30 days of creation, isNew must remain false in the DB to dynamically evaluate as true.
     const isWithin30Days = existing.createdAt ? (Date.now() - new Date(existing.createdAt).getTime()) < 30 * 24 * 60 * 60 * 1000 : false;
@@ -1113,7 +1119,7 @@ const bulkCreateProducts = async (req, res) => {
         makingChargeType: makingChargeType || "per_gram",
         metalImages,
         sizeChart: pData.sizeChart || "",
-        certificate: certificate || "",
+        certificate: parseImageUrls(certificate),
         diamondOptions: [],
         occasion: occasionsParsed,
         gender: gender || "Women",

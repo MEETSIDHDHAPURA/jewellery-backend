@@ -53,7 +53,7 @@ const productSchema = new mongoose.Schema(
       type: String, // URL for Image/PDF
     },
     certificate: {
-      type: String, // URL for Image/PDF
+      type: [String], // Array of URLs for Images/PDFs
     },
     makingCharge: {
       type: Number,
