@@ -24,6 +24,13 @@ const METADATA_CACHE_TTL = 15 * 1000; // 15 seconds
 
 const categoryModifiersCache = {};
 
+// Simple In-memory cache for product lists
+let productsCache = {};
+const clearProductCache = () => {
+  productsCache = {};
+};
+
+
 // Helper to safely parse JSON strings sent via multipart/form-data
 const safeParseJSON = (value, fallback = []) => {
   if (value === undefined || value === null || value === "") return fallback;
@@ -344,6 +351,7 @@ const createProduct = async (req, res) => {
     }
 
     clearLandingPageCache();
+    clearProductCache();
     // Fire-and-forget: don't block response on activity logging
     logActivity(req, "Create", `create product ${product.title}`).catch(() => { });
     res.status(201).json(new ApiResponse(201, product, "Product and variants created successfully"));
@@ -357,6 +365,11 @@ const createProduct = async (req, res) => {
  */
 const getAllProducts = async (req, res) => {
   try {
+    const cacheKey = JSON.stringify(req.query);
+    if (productsCache[cacheKey]) {
+      return res.status(200).json(productsCache[cacheKey]);
+    }
+
     const {
       category, occasion, gender, metal, purity, minPrice, maxPrice,
       isFeatured, search, page = 1, limit = 10, isActive,
@@ -573,10 +586,14 @@ const getAllProducts = async (req, res) => {
     const products = result[0]?.products || [];
     const total = result[0]?.totalCount[0]?.count || 0;
 
-    res.status(200).json(new ApiResponse(200, {
+    const responsePayload = new ApiResponse(200, {
       products,
       pagination: { total, page: safePage, limit: safeLimit, pages: Math.ceil(total / safeLimit) }
-    }, "Products fetched successfully"));
+    }, "Products fetched successfully");
+
+    productsCache[cacheKey] = responsePayload;
+
+    res.status(200).json(responsePayload);
   } catch (error) {
     res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));
   }
@@ -811,6 +828,7 @@ const updateProduct = async (req, res) => {
     logActivity(req, "Update", actionDescription).catch(() => { });
 
     clearLandingPageCache();
+    clearProductCache();
     res.status(200).json(new ApiResponse(200, product, "Product updated successfully"));
   } catch (error) {
     res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));
@@ -839,6 +857,7 @@ const deleteProduct = async (req, res) => {
     logActivity(req, "Delete", `Delete this product ${product.title}`).catch(() => { });
 
     clearLandingPageCache();
+    clearProductCache();
     res.status(200).json(new ApiResponse(200, {}, "Product deleted successfully"));
   } catch (error) {
     res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));
@@ -1080,6 +1099,7 @@ const bulkCreateProducts = async (req, res) => {
     logActivity(req, "Create", `bulk create ${createdProducts.length} products`).catch(() => { });
 
     clearLandingPageCache();
+    clearProductCache();
     res.status(201).json(new ApiResponse(201, createdProducts, `${createdProducts.length} products imported successfully`));
   } catch (error) {
     res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));
@@ -1293,6 +1313,7 @@ module.exports = {
   getRelatedProducts,
   globalSearch,
   uploadProductMedia,
+  clearProductCache,
 };
 
 

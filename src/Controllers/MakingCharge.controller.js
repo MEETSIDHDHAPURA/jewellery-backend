@@ -3,6 +3,7 @@ const ApiResponse = require("../Utils/ApiResponse");
 const ApiError = require("../Utils/ApiError");
 const { recalculateAndSavePrices } = require("../Utils/Product.utils.js");
 const logActivity = require("../Utils/logActivity");
+const { clearProductCache } = require("./Product.controllers.js");
 
 // Create Making Charge
 const createMakingCharge = async (req, res) => {
@@ -142,6 +143,7 @@ const setMargin = async (req, res) => {
     );
 
     await recalculateAndSavePrices();
+    clearProductCache();
 
     await logActivity(req, "Update", `Update profit margin from ${oldMargin}% to ${config.value}%`);
 
@@ -151,11 +153,17 @@ const setMargin = async (req, res) => {
   }
 };
 
+let cachedRates = null;
+
 // Get Currency Rates
 const getCurrencyRates = async (req, res) => {
   try {
+    if (cachedRates) {
+      return res.status(200).json(new ApiResponse(200, cachedRates, "Currency rates fetched successfully"));
+    }
     const config = await GlobalConfig.findOne({ key: "currency_rates" });
     const rates = config ? config.value : { INR: 83.5, CAD: 1.36 };
+    cachedRates = rates;
     res.status(200).json(new ApiResponse(200, rates, "Currency rates fetched successfully"));
   } catch (error) {
     res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));
@@ -175,6 +183,8 @@ const setCurrencyRates = async (req, res) => {
       { key: "currency_rates", value: { INR: Number(INR), CAD: Number(CAD) } },
       { upsert: true, returnDocument: "after" }
     );
+
+    cachedRates = config.value;
 
     await logActivity(req, "Update", `Update currency rates: INR to ${INR}, CAD to ${CAD}`);
 

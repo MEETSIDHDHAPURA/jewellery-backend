@@ -4,6 +4,7 @@ const ApiError = require("../Utils/ApiError");
 const { clearLandingPageCache } = require("./LandingPage.controllers");
 const { uploadOnCloudinary, updateOnCloudinary, deleteFromCloudinary } = require("../Utils/Cloudinary");
 const logActivity = require("../Utils/logActivity");
+const { clearProductCache } = require("./Product.controllers");
 
 // Create Category
 const createCategory = async (req, res) => {
@@ -75,6 +76,7 @@ const createCategory = async (req, res) => {
     }
 
     clearLandingPageCache();
+    clearProductCache();
     await logActivity(req, "Create", `create category: ${trimmedName}`);
     res.status(201).json(new ApiResponse(201, category, "Category created successfully"));
   } catch (error) {
@@ -189,6 +191,7 @@ const updateCategory = async (req, res) => {
     await logActivity(req, "Update", action);
 
     clearLandingPageCache();
+    clearProductCache();
     res.status(200).json(new ApiResponse(200, category, "Category updated successfully"));
   } catch (error) {
     res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));
@@ -236,6 +239,7 @@ const deleteCategory = async (req, res) => {
     }
 
     clearLandingPageCache();
+    clearProductCache();
     await logActivity(req, "Delete", `Delete this category ${categoryName}`);
     res.status(200).json(new ApiResponse(200, {}, "Category deleted successfully"));
   } catch (error) {

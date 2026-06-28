@@ -279,6 +279,14 @@ const recalculateAndSavePrices = async (filterMetals = null) => {
       product.Price = newPrice;
       await product.save();
     }
+
+    // Clear product list cache since prices recalculated
+    try {
+      const { clearProductCache } = require("../Controllers/Product.controllers");
+      clearProductCache();
+    } catch (e) {
+      console.error("Failed to clear product cache in recalculateAndSavePrices:", e);
+    }
   } catch (error) {
     console.error("Error in recalculateAndSavePrices:", error);
   }

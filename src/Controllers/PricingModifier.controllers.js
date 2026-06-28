@@ -5,6 +5,7 @@ const MakingCharge = require("../Models/MakingCharge.Model");
 const GlobalConfig = require("../Models/GlobalConfig.Model");
 const ApiResponse = require("../Utils/ApiResponse");
 const ApiError = require("../Utils/ApiError");
+const { clearProductCache } = require("./Product.controllers");
 
 /**
  * Get All Pricing Modifiers (grouped by attributeType)
@@ -88,6 +89,7 @@ const createModifier = async (req, res) => {
       sortOrder: sortOrder || 0,
     });
 
+    clearProductCache();
     res
       .status(201)
       .json(
@@ -119,6 +121,7 @@ const updateModifier = async (req, res) => {
 
     if (!modifier) throw new ApiError(404, "Modifier not found");
 
+    clearProductCache();
     res
       .status(200)
       .json(
@@ -139,6 +142,7 @@ const deleteModifier = async (req, res) => {
     const modifier = await PricingModifier.findByIdAndDelete(req.params.id);
     if (!modifier) throw new ApiError(404, "Modifier not found");
 
+    clearProductCache();
     res
       .status(200)
       .json(new ApiResponse(200, {}, "Pricing modifier deleted successfully"));
@@ -177,6 +181,7 @@ const seedDefaults = async (req, res) => {
       const catId = cat._id.toString();
       const catName = (cat.name || "").toLowerCase();
       const isRing = catName === "ring" || catName === "rings";
+      const isBracelet = catName === "bracelet" || catName === "bracelets";
 
       // Delete existing modifiers for this category to avoid mixed values (like old sizes)
       await PricingModifier.deleteMany({ category: catId });
@@ -226,6 +231,18 @@ const seedDefaults = async (req, res) => {
           { category: catId, attributeType: "size", value: "9.5", label: "Size 9.5", modifierType: "flat_add", modifierValue: 500, sortOrder: 12 },
           { category: catId, attributeType: "size", value: "10", label: "Size 10", modifierType: "flat_add", modifierValue: 500, sortOrder: 13 }
         );
+      } else if (isBracelet) {
+        for (let size = 5; size <= 14; size++) {
+          dynamicDefaults.push({
+            category: catId,
+            attributeType: "size",
+            value: `${size} (in)`,
+            label: `${size} (in)`,
+            modifierType: "flat_add",
+            modifierValue: 0,
+            sortOrder: size - 4
+          });
+        }
       } else {
         dynamicDefaults.push(
           { category: catId, attributeType: "size", value: "Extra small (xs)", label: "Extra small (xs)", modifierType: "flat_add", modifierValue: 0, sortOrder: 1 },
@@ -240,6 +257,7 @@ const seedDefaults = async (req, res) => {
       totalSeeded += dynamicDefaults.length;
     }
 
+    clearProductCache();
     res
       .status(200)
       .json(
