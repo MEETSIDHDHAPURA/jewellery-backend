@@ -46,16 +46,68 @@ const formatWishlist = (wishlist) => {
   return wishlistObj;
 };
 
+// Sync wishlist items to ensure no deleted or inactive products/diamonds remain
+const syncWishlistItems = async (wishlist) => {
+  if (!wishlist) return wishlist;
+
+  const needsPopulate = 
+    (wishlist.products && wishlist.products.some(p => p && !p.name)) ||
+    (wishlist.diamonds && wishlist.diamonds.some(d => d && !d.shape));
+
+  if (needsPopulate) {
+    await wishlist.populate("products");
+    await wishlist.populate("diamonds");
+  }
+
+  let hasChanges = false;
+
+  if (wishlist.products && wishlist.products.length > 0) {
+    const activeProducts = wishlist.products.filter(p => {
+      if (!p || p.isDeleted || p.isActive === false) {
+        hasChanges = true;
+        return false;
+      }
+      return true;
+    });
+    if (hasChanges) {
+      wishlist.products = activeProducts.map(p => p._id);
+    }
+  }
+
+  if (wishlist.diamonds && wishlist.diamonds.length > 0) {
+    const activeDiamonds = wishlist.diamonds.filter(d => {
+      if (!d || d.isActive === false) {
+        hasChanges = true;
+        return false;
+      }
+      return true;
+    });
+    if (hasChanges) {
+      wishlist.diamonds = activeDiamonds.map(d => d._id);
+    }
+  }
+
+  if (hasChanges) {
+    await wishlist.save();
+  }
+
+  return wishlist;
+};
+
 // Get user's wishlist
 const getWishlist = async (req, res) => {
   try {
     const userId = getUserId(req);
-    let wishlist = await Wishlist.findOne({ user: userId })
-      .populate("products")
-      .populate("diamonds");
+    let wishlist = await Wishlist.findOne({ user: userId });
 
     if (!wishlist) {
       wishlist = await Wishlist.create({ user: userId, products: [], diamonds: [] });
+    } else {
+      await syncWishlistItems(wishlist);
+      // Refetch with populated details
+      wishlist = await Wishlist.findById(wishlist._id)
+        .populate("products")
+        .populate("diamonds");
     }
 
     res.status(200).json(new ApiResponse(200, formatWishlist(wishlist), "Wishlist fetched successfully"));
@@ -77,6 +129,8 @@ const addToWishlist = async (req, res) => {
     let wishlist = await Wishlist.findOne({ user: userId });
     if (!wishlist) {
       wishlist = await Wishlist.create({ user: userId, products: [], diamonds: [] });
+    } else {
+      await syncWishlistItems(wishlist);
     }
 
     if (!wishlist.diamonds) {
@@ -132,6 +186,7 @@ const removeFromWishlist = async (req, res) => {
     if (!wishlist) {
       throw new ApiError(404, "Wishlist not found");
     }
+    await syncWishlistItems(wishlist);
 
     if (!wishlist.diamonds) {
       wishlist.diamonds = [];
@@ -181,6 +236,8 @@ const toggleWishlist = async (req, res) => {
     let wishlist = await Wishlist.findOne({ user: userId });
     if (!wishlist) {
       wishlist = await Wishlist.create({ user: userId, products: [], diamonds: [] });
+    } else {
+      await syncWishlistItems(wishlist);
     }
 
     if (!wishlist.diamonds) {

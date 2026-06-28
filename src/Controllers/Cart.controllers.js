@@ -236,15 +236,70 @@ const recalculateCartDiscount = async (cart) => {
   return cart;
 };
 
+// Sync cart items to ensure no deleted or inactive products/diamonds remain
+const syncCartItems = async (cart) => {
+  if (!cart || !cart.items || cart.items.length === 0) return cart;
+
+  // Make sure items are populated for check
+  const needsPopulate = cart.items.some(
+    (item) =>
+      (item.product && (!item.product.title || !item.product.category)) ||
+      (item.diamond && !item.diamond.shape)
+  );
+
+  if (needsPopulate) {
+    await cart.populate([
+      { path: "items.product" },
+      { path: "items.diamond" }
+    ]);
+  }
+
+  let hasChanges = false;
+  const activeItems = [];
+
+  for (const item of cart.items) {
+    let keep = true;
+    
+    // Check jewelry products (item has product reference and is not a loose diamond)
+    const isLooseDiamond = item.metal === "-" || item.diamond || item.shape;
+    if (!isLooseDiamond && item.product) {
+      if (!item.product || item.product.isDeleted || item.product.isActive === false) {
+        keep = false;
+      }
+    }
+    // Check specific loose diamonds (item has diamond reference)
+    else if (item.diamond) {
+      if (!item.diamond || item.diamond.isActive === false) {
+        keep = false;
+      }
+    }
+
+    if (keep) {
+      activeItems.push(item);
+    } else {
+      hasChanges = true;
+    }
+  }
+
+  if (hasChanges) {
+    cart.items = activeItems;
+    await recalculateCartDiscount(cart);
+    await cart.save();
+  }
+
+  return cart;
+};
+
 // Get user's cart
 const getCart = async (req, res) => {
   try {
     const userId = getUserId(req);
-    let cart = await Cart.findOne({ user: userId }).populate({ path: "items.product", populate: { path: "category" } }).populate("items.diamond");
+    let cart = await Cart.findOne({ user: userId });
 
     if (!cart) {
       cart = await Cart.create({ user: userId, items: [] });
     } else {
+      await syncCartItems(cart);
       // Recalculate discount to ensure validity
       await recalculateCartDiscount(cart);
       await cart.save();
@@ -275,6 +330,8 @@ const addToCart = async (req, res) => {
     let cart = await Cart.findOne({ user: userId });
     if (!cart) {
       cart = await Cart.create({ user: userId, items: [] });
+    } else {
+      await syncCartItems(cart);
     }
 
     const diamondShapes = ["Round", "Oval", "Cushion", "Princess", "Pear", "Radiant", "Emerald", "Marquise", "Heart", "Asscher"];
@@ -398,6 +455,7 @@ const updateCartItem = async (req, res) => {
     if (!cart) {
       throw new ApiError(404, "Cart not found");
     }
+    await syncCartItems(cart);
 
     const itemIndex = cart.items.findIndex((item) => item._id.toString() === itemId.toString());
     if (itemIndex === -1) {
@@ -436,6 +494,7 @@ const removeFromCart = async (req, res) => {
     if (!cart) {
       throw new ApiError(404, "Cart not found");
     }
+    await syncCartItems(cart);
 
     const itemIndex = cart.items.findIndex((item) => item._id.toString() === itemId.toString());
     if (itemIndex === -1) {
@@ -485,7 +544,12 @@ const applyCoupon = async (req, res) => {
       throw new ApiError(400, "Coupon code is required");
     }
 
-    let cart = await Cart.findOne({ user: userId })
+    let cart = await Cart.findOne({ user: userId });
+    if (!cart || cart.items.length === 0) {
+      throw new ApiError(400, "Cannot apply coupon to an empty cart");
+    }
+    await syncCartItems(cart);
+    cart = await Cart.findById(cart._id)
       .populate({ path: "items.product", populate: { path: "category" } })
       .populate("items.diamond");
     if (!cart || cart.items.length === 0) {
@@ -615,6 +679,7 @@ const removeCoupon = async (req, res) => {
     if (!cart) {
       throw new ApiError(404, "Cart not found");
     }
+    await syncCartItems(cart);
 
     cart.couponCode = null;
     cart.discountAmount = 0;

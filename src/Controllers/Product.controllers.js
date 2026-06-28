@@ -1303,6 +1303,37 @@ const uploadProductMedia = async (req, res) => {
   }
 };
 
+/**
+ * Validate Guest Cart / Wishlist Items
+ */
+const validateGuestItems = async (req, res) => {
+  try {
+    const { productIds = [], diamondIds = [] } = req.body;
+    const DiamondPrice = require("../Models/DiamondPrice.Model");
+
+    const validProducts = await Product.find({
+      _id: { $in: productIds },
+      isDeleted: false,
+      isActive: true,
+    }).select("_id").lean();
+
+    const validDiamonds = await DiamondPrice.find({
+      _id: { $in: diamondIds },
+      isActive: true,
+      isSoldOut: false,
+    }).select("_id").lean();
+
+    const validProductIds = validProducts.map(p => p._id.toString());
+    const validDiamondIds = validDiamonds.map(d => d._id.toString());
+
+    res.status(200).json(
+      new ApiResponse(200, { validProductIds, validDiamondIds }, "Guest items validated successfully")
+    );
+  } catch (error) {
+    res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));
+  }
+};
+
 module.exports = {
   createProduct,
   getAllProducts,
@@ -1314,6 +1345,7 @@ module.exports = {
   globalSearch,
   uploadProductMedia,
   clearProductCache,
+  validateGuestItems,
 };
 
 

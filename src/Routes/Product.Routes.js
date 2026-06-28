@@ -41,6 +41,7 @@ router.post("/upload-media", adminOnly, upload.any(), productController.uploadPr
 router.get("/", productController.getAllProducts);
 router.get("/all", productController.getAllProducts);
 router.get("/search", productController.globalSearch);
+router.post("/validate-guest-items", productController.validateGuestItems);
 
 router.get("/related/:id", productController.getRelatedProducts);
 
