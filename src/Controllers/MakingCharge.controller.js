@@ -194,6 +194,10 @@ const setCurrencyRates = async (req, res) => {
   }
 };
 
+const updateCachedRates = (rates) => {
+  cachedRates = rates;
+};
+
 module.exports = {
   createMakingCharge,
   getMakingCharges,
@@ -204,5 +208,6 @@ module.exports = {
   setMargin,
   getCurrencyRates,
   setCurrencyRates,
+  updateCachedRates,
 };
 
