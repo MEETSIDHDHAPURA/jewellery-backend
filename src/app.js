@@ -26,6 +26,7 @@ const quotationRoutes = require("./Routes/Quotation.Routes");
 const herotextRoutes = require("./Routes/Herotext.Routes");
 const activityLogRoutes = require("./Routes/ActivityLog.Routes");
 const dashboardRoutes = require("./Routes/Dashboard.Routes");
+const paymentRoutes = require("./Routes/Payment.Routes");
 
 
 app.use(
@@ -33,6 +34,10 @@ app.use(
     origin: process.env.CORS_ORIGIN || "*",
   })
 );
+
+// Mount Stripe payment & webhook routes (webhook needs raw body parsing)
+app.use("/api/v1/payment", paymentRoutes);
+
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 app.use(express.static(path.join(__dirname, "..", "public")));
