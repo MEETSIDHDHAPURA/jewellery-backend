@@ -200,7 +200,7 @@ const getUserProfile = async (req, res) => {
 const updateUserProfile = async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, phone, countryCode, addresses, isActive, role } = req.body;
+    const { name, email, phone, countryCode, addresses, isActive, role } = req.body;
 
     // Ensure requesting user is updating their own profile or is an admin
     const isAdmin = req.user?.role === "admin" || req.user?.role === "SuperAdmin";
@@ -212,6 +212,13 @@ const updateUserProfile = async (req, res) => {
     if (!user) throw new ApiError(404, "User not found");
 
     if (name) user.name = name;
+    if (email && email.toLowerCase() !== user.email.toLowerCase()) {
+      const emailExists = await User.findOne({ email: email.toLowerCase() });
+      if (emailExists) {
+        throw new ApiError(400, "User with this email already exists");
+      }
+      user.email = email.toLowerCase();
+    }
     if (phone) user.phone = phone;
     if (countryCode !== undefined) user.countryCode = countryCode;
     if (addresses) user.addresses = addresses;
