@@ -5,6 +5,9 @@ const ApiResponse = require("../Utils/ApiResponse");
 const ApiError = require("../Utils/ApiError");
 const sendMail = require("../Utils/Nodemailer");
 const GlobalConfig = require("../Models/GlobalConfig.Model");
+const DiamondPrice = require("../Models/DiamondPrice.Model");
+const Coupon = require("../Models/Coupon.Model");
+const CouponUsage = require("../Models/CouponUsage.Model");
 
 // Create Stripe Checkout Session
 const createCheckoutSession = async (req, res) => {
@@ -54,7 +57,7 @@ const createCheckoutSession = async (req, res) => {
       ],
       mode: "payment",
       success_url: `${process.env.CLIENT_URL || "http://localhost:3000"}/cart?success=true&orderId=${order._id}`,
-      cancel_url: `${process.env.CLIENT_URL || "http://localhost:3000"}/cart?canceled=true`,
+      cancel_url: `${process.env.CLIENT_URL || "http://localhost:3000"}/cart?canceled=true&orderId=${order._id}`,
       metadata: {
         orderId: order._id.toString(),
       },
@@ -106,6 +109,58 @@ const stripeWebhook = async (req, res) => {
             order.paymentStatus = "Completed";
             order.paymentId = session.payment_intent || session.id;
             await order.save();
+
+            // ─── Manage Diamond Stock ───
+            for (const item of order.items) {
+              if (item.diamond) {
+                await DiamondPrice.findByIdAndUpdate(
+                  item.diamond,
+                  [
+                    {
+                      $set: {
+                        stock: { $subtract: ["$stock", item.quantity || 1] }
+                      }
+                    },
+                    {
+                      $set: {
+                        isSoldOut: {
+                          $cond: {
+                            if: { $lte: ["$stock", 0] },
+                            then: true,
+                            else: false
+                          }
+                        }
+                      }
+                    }
+                  ],
+                  { returnDocument: "after", updatePipeline: true }
+                );
+              }
+            }
+
+            // ─── Coupon Usage Logging ───
+            if (order.couponCode) {
+              const coupon = await Coupon.findOne({ code: order.couponCode.toUpperCase() });
+              if (coupon) {
+                // Increment global used count
+                coupon.usedCount = (coupon.usedCount || 0) + 1;
+                await coupon.save();
+
+                // Create usage log for reporting & per-customer limit tracking
+                const userId = order.user;
+                if (userId) {
+                  await CouponUsage.create({
+                    coupon: coupon._id,
+                    user: userId,
+                    order: order._id,
+                    code: coupon.code,
+                    discountType: coupon.discountType,
+                    discountAmount: order.discountAmount || 0,
+                    orderTotal: order.totalAmount || 0,
+                  });
+                }
+              }
+            }
 
             // Send Confirmation Email
             try {

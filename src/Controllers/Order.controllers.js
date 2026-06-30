@@ -50,58 +50,6 @@ const createOrder = async (req, res) => {
       shippingAddress,
     });
 
-    // ─── Manage Diamond Stock ───
-    for (const item of items) {
-      if (item.diamond) {
-        await DiamondPrice.findByIdAndUpdate(
-          item.diamond,
-          [
-            {
-              $set: {
-                stock: { $subtract: ["$stock", item.quantity || 1] }
-              }
-            },
-            {
-              $set: {
-                isSoldOut: {
-                  $cond: {
-                    if: { $lte: ["$stock", 0] },
-                    then: true,
-                    else: false
-                  }
-                }
-              }
-            }
-          ],
-          { returnDocument: "after", updatePipeline: true }
-        );
-      }
-    }
-
-    // ─── Coupon Usage Logging ───
-    if (couponCode) {
-      const coupon = await Coupon.findOne({ code: couponCode.toUpperCase() });
-      if (coupon) {
-        // Increment global used count
-        coupon.usedCount = (coupon.usedCount || 0) + 1;
-        await coupon.save();
-
-        // Create usage log for reporting & per-customer limit tracking
-        const userId = req.user ? req.user._id : req.body.userId;
-        if (userId) {
-          await CouponUsage.create({
-            coupon: coupon._id,
-            user: userId,
-            order: order._id,
-            code: coupon.code,
-            discountType: coupon.discountType,
-            discountAmount: discountAmount || 0,
-            orderTotal: totalAmount || 0,
-          });
-        }
-      }
-    }
-
     res.status(201).json(new ApiResponse(201, order, "Order placed successfully"));
   } catch (error) {
     res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));
@@ -111,7 +59,7 @@ const createOrder = async (req, res) => {
 // Get All Orders (Admin)
 const getAllOrders = async (req, res) => {
   try {
-    const orders = await Order.find()
+    const orders = await Order.find({ paymentStatus: { $ne: "Pending" } })
       .populate("user")
       .populate("items.product")
       .populate("items.diamond")
@@ -132,7 +80,7 @@ const getUserOrders = async (req, res) => {
       throw new ApiError(403, "Access denied. You can only view your own orders.");
     }
 
-    const orders = await Order.find({ user: userId })
+    const orders = await Order.find({ user: userId, paymentStatus: { $ne: "Pending" } })
       .populate("items.product")
       .populate("items.diamond")
       .sort({ createdAt: -1 });
@@ -209,10 +157,32 @@ const getOrderById = async (req, res) => {
   }
 };
 
+// Cancel/Delete Pending Order
+const deletePendingOrder = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const order = await Order.findById(id);
+    if (!order) {
+      throw new ApiError(404, "Order not found");
+    }
+
+    // Only allow deleting if it's a Pending order (unpaid)
+    if (order.paymentStatus !== "Pending") {
+      throw new ApiError(400, "Cannot delete a completed or failed order");
+    }
+
+    await Order.findByIdAndDelete(id);
+    res.status(200).json(new ApiResponse(200, null, "Pending order cancelled and deleted successfully"));
+  } catch (error) {
+    res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));
+  }
+};
+
 module.exports = {
   createOrder,
   getAllOrders,
   getUserOrders,
   updateOrderStatus,
   getOrderById,
+  deletePendingOrder,
 };
