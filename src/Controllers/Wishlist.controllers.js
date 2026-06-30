@@ -193,11 +193,17 @@ const removeFromWishlist = async (req, res) => {
     }
 
     const productIndex = wishlist.products.findIndex(
-      (id) => id && id.toString() === productId.toString()
+      (id) => {
+        const idStr = id && (id._id ? id._id.toString() : id.toString());
+        return idStr === productId.toString();
+      }
     );
 
     const diamondIndex = wishlist.diamonds.findIndex(
-      (id) => id && id.toString() === productId.toString()
+      (id) => {
+        const idStr = id && (id._id ? id._id.toString() : id.toString());
+        return idStr === productId.toString();
+      }
     );
 
     if (productIndex === -1 && diamondIndex === -1) {
@@ -252,7 +258,10 @@ const toggleWishlist = async (req, res) => {
     let message;
     if (isDiamond) {
       const diamondIndex = wishlist.diamonds.findIndex(
-        (id) => id && id.toString() === productId.toString()
+        (id) => {
+          const idStr = id && (id._id ? id._id.toString() : id.toString());
+          return idStr === productId.toString();
+        }
       );
       if (diamondIndex > -1) {
         wishlist.diamonds.splice(diamondIndex, 1);
@@ -263,7 +272,10 @@ const toggleWishlist = async (req, res) => {
       }
     } else {
       const productIndex = wishlist.products.findIndex(
-        (id) => id && id.toString() === productId.toString()
+        (id) => {
+          const idStr = id && (id._id ? id._id.toString() : id.toString());
+          return idStr === productId.toString();
+        }
       );
       if (productIndex > -1) {
         wishlist.products.splice(productIndex, 1);

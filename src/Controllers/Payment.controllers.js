@@ -4,6 +4,7 @@ const User = require("../Models/User.Model");
 const ApiResponse = require("../Utils/ApiResponse");
 const ApiError = require("../Utils/ApiError");
 const sendMail = require("../Utils/Nodemailer");
+const GlobalConfig = require("../Models/GlobalConfig.Model");
 
 // Create Stripe Checkout Session
 const createCheckoutSession = async (req, res) => {
@@ -21,10 +22,18 @@ const createCheckoutSession = async (req, res) => {
     const targetCurrency = currency.toLowerCase();
     let convertedAmount = order.totalAmount;
 
-    if (targetCurrency === "inr") {
-      convertedAmount = order.totalAmount * 83.5;
-    } else if (targetCurrency === "cad") {
-      convertedAmount = order.totalAmount * 1.36;
+    if (targetCurrency === "inr" || targetCurrency === "cad") {
+      const config = await GlobalConfig.findOne({ key: "currency_rates" });
+      const rates = config ? config.value : { INR: 83.5, CAD: 1.36 };
+
+      console.log("Currency Rates:", rates);
+
+      if (targetCurrency === "inr") {
+        convertedAmount = order.totalAmount * (rates.INR || 83.5);
+      } else if (targetCurrency === "cad") {
+        convertedAmount = order.totalAmount * (rates.CAD || 1.36);
+      }
+      convertedAmount = Math.round(convertedAmount);
     }
 
     const amountInCents = Math.round(convertedAmount * 100);
