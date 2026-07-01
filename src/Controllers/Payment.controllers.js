@@ -12,7 +12,7 @@ const CouponUsage = require("../Models/CouponUsage.Model");
 // Create Stripe Checkout Session
 const createCheckoutSession = async (req, res) => {
   try {
-    const { orderId, currency = "usd" } = req.body;
+    const { orderId } = req.body;
     if (!orderId) {
       throw new ApiError(400, "OrderId is required");
     }
@@ -22,22 +22,9 @@ const createCheckoutSession = async (req, res) => {
       throw new ApiError(404, "Order not found");
     }
 
-    const targetCurrency = currency.toLowerCase();
-    let convertedAmount = order.totalAmount;
-
-    if (targetCurrency === "inr" || targetCurrency === "cad") {
-      const config = await GlobalConfig.findOne({ key: "currency_rates" });
-      const rates = config ? config.value : { INR: 83.5, CAD: 1.36 };
-
-      console.log("Currency Rates:", rates);
-
-      if (targetCurrency === "inr") {
-        convertedAmount = order.totalAmount * (rates.INR || 83.5);
-      } else if (targetCurrency === "cad") {
-        convertedAmount = order.totalAmount * (rates.CAD || 1.36);
-      }
-      convertedAmount = Math.round(convertedAmount);
-    }
+    const targetCurrency = (order.currency || "USD").toLowerCase();
+    const rate = order.exchangeRate || 1;
+    const convertedAmount = Math.round(order.totalAmount * rate);
 
     const amountInCents = Math.round(convertedAmount * 100);
 

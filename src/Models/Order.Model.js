@@ -73,6 +73,14 @@ const orderSchema = new mongoose.Schema(
     paymentId: String,
     trackingId: String,
     trackingLink: String,
+    currency: {
+      type: String,
+      default: "USD",
+    },
+    exchangeRate: {
+      type: Number,
+      default: 1,
+    },
   },
   { timestamps: true }
 );

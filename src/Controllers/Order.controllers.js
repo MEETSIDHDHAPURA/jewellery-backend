@@ -7,11 +7,12 @@ const ApiResponse = require("../Utils/ApiResponse");
 const ApiError = require("../Utils/ApiError");
 const logActivity = require("../Utils/logActivity");
 const sendMail = require("../Utils/Nodemailer");
+const GlobalConfig = require("../Models/GlobalConfig.Model");
 
 // Create Order
 const createOrder = async (req, res) => {
   try {
-    const { items, subTotal, discountAmount, totalAmount, couponCode, shippingAddress } = req.body;
+    const { items, subTotal, discountAmount, totalAmount, couponCode, shippingAddress, currency = "USD" } = req.body;
 
     if (!items || items.length === 0) {
       throw new ApiError(400, "Order items are required");
@@ -39,6 +40,18 @@ const createOrder = async (req, res) => {
 
     const orderId = await generateUniqueOrderId();
 
+    let rate = 1;
+    const targetCurrency = currency.toUpperCase();
+    if (targetCurrency !== "USD") {
+      const config = await GlobalConfig.findOne({ key: "currency_rates" });
+      const rates = config ? config.value : { INR: 83.5, CAD: 1.36 };
+      if (targetCurrency === "INR") {
+        rate = rates.INR || 83.5;
+      } else if (targetCurrency === "CAD") {
+        rate = rates.CAD || 1.36;
+      }
+    }
+
     const order = await Order.create({
       orderId,
       user: req.user ? req.user._id : req.body.userId, // Support both logged in and guest with ID
@@ -48,6 +61,8 @@ const createOrder = async (req, res) => {
       totalAmount,
       couponCode,
       shippingAddress,
+      currency: targetCurrency,
+      exchangeRate: rate,
     });
 
     res.status(201).json(new ApiResponse(201, order, "Order placed successfully"));
@@ -83,6 +98,7 @@ const getUserOrders = async (req, res) => {
     const orders = await Order.find({ user: userId, paymentStatus: { $ne: "Pending" } })
       .populate("items.product")
       .populate("items.diamond")
+      .populate("user")
       .sort({ createdAt: -1 });
     res.status(200).json(new ApiResponse(200, orders, "User orders fetched successfully"));
   } catch (error) {
