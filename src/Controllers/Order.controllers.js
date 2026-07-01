@@ -136,7 +136,7 @@ const updateOrderStatus = async (req, res) => {
 const getOrderById = async (req, res) => {
   try {
     const { id } = req.params;
-    const order = await Order.findById(id)
+    let order = await Order.findById(id)
       .populate("items.product")
       .populate("items.diamond")
       .populate("user");
@@ -148,6 +148,75 @@ const getOrderById = async (req, res) => {
       const orderUserId = order.user._id ? order.user._id.toString() : order.user.toString();
       if (!req.user || (req.user._id.toString() !== orderUserId && req.user.role !== "admin" && req.user.role !== "SuperAdmin")) {
         throw new ApiError(403, "Access denied. You do not have permission to view this order.");
+      }
+    }
+
+    // Sync payment status from Stripe if order is still Pending but payment has been completed
+    if (order.paymentStatus === "Pending" && order.paymentId) {
+      try {
+        const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
+        const session = await stripe.checkout.sessions.retrieve(order.paymentId);
+        if (session && session.payment_status === "paid") {
+          order.paymentStatus = "Completed";
+          order.paymentId = session.payment_intent || session.id;
+          await order.save();
+
+          // Re-populate and query to return updated order details
+          order = await Order.findById(id)
+            .populate("items.product")
+            .populate("items.diamond")
+            .populate("user");
+
+          // ─── Manage Diamond Stock ───
+          for (const item of order.items) {
+            if (item.diamond) {
+              await DiamondPrice.findByIdAndUpdate(
+                item.diamond,
+                [
+                  {
+                    $set: {
+                      stock: { $subtract: ["$stock", item.quantity || 1] }
+                    }
+                  },
+                  {
+                    $set: {
+                      isSoldOut: {
+                        $cond: {
+                          if: { $lte: ["$stock", 0] },
+                          then: true,
+                          else: false
+                        }
+                      }
+                    }
+                  }
+                ],
+                { returnDocument: "after", updatePipeline: true }
+              );
+            }
+          }
+
+          // ─── Coupon Usage Logging ───
+          if (order.couponCode) {
+            const coupon = await Coupon.findOne({ code: order.couponCode.toUpperCase() });
+            if (coupon) {
+              // Increment global used count
+              coupon.usedCount = (coupon.usedCount || 0) + 1;
+              await coupon.save();
+
+              // Create usage log for reporting & per-customer limit tracking
+              const userId = order.user;
+              if (userId) {
+                await CouponUsage.create({
+                  coupon: coupon._id,
+                  user: userId,
+                  order: order._id,
+                });
+              }
+            }
+          }
+        }
+      } catch (stripeErr) {
+        console.error("Failed to check Stripe session status in getOrderById:", stripeErr.message);
       }
     }
 
