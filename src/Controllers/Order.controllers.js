@@ -195,7 +195,9 @@ const getOrderById = async (req, res) => {
                 [
                   {
                     $set: {
-                      stock: { $subtract: ["$stock", item.quantity || 1] }
+                      stock: {
+                        $max: [0, { $subtract: ["$stock", item.quantity || 1] }]
+                      }
                     }
                   },
                   {
@@ -303,7 +305,9 @@ const verifyPaymentToken = async (req, res) => {
                 [
                   {
                     $set: {
-                      stock: { $subtract: ["$stock", item.quantity || 1] }
+                      stock: {
+                        $max: [0, { $subtract: ["$stock", item.quantity || 1] }]
+                      }
                     }
                   },
                   {
