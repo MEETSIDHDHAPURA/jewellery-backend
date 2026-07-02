@@ -78,7 +78,8 @@ const getAllOrders = async (req, res) => {
       .populate("user")
       .populate("items.product")
       .populate("items.diamond")
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .lean();
     res.status(200).json(new ApiResponse(200, orders, "Orders fetched successfully"));
   } catch (error) {
     res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));
@@ -99,7 +100,8 @@ const getUserOrders = async (req, res) => {
       .populate("items.product")
       .populate("items.diamond")
       .populate("user")
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .lean();
     res.status(200).json(new ApiResponse(200, orders, "User orders fetched successfully"));
   } catch (error) {
     res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));

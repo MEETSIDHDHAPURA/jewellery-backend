@@ -94,7 +94,7 @@ const getAllCategories = async (req, res) => {
       query.name = { $regex: search, $options: "i" };
     }
 
-    const categories = await Category.find(query).sort({ name: 1 });
+    const categories = await Category.find(query).sort({ name: 1 }).lean();
     res.status(200).json(new ApiResponse(200, categories, "Categories fetched successfully"));
   } catch (error) {
     res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));

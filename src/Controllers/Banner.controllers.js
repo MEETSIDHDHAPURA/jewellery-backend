@@ -45,7 +45,7 @@ const createBanner = async (req, res) => {
 // Get All Banners
 const getAllBanners = async (req, res) => {
   try {
-    const banners = await Banner.find().populate("category").sort({ order: 1, createdAt: -1 });
+    const banners = await Banner.find().populate("category").sort({ order: 1, createdAt: -1 }).lean();
     res.status(200).json(new ApiResponse(200, banners, "Banners fetched successfully"));
   } catch (error) {
     res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));
@@ -55,7 +55,7 @@ const getAllBanners = async (req, res) => {
 // Get Banner By ID
 const getBannerById = async (req, res) => {
   try {
-    const banner = await Banner.findById(req.params.id).populate("category");
+    const banner = await Banner.findById(req.params.id).populate("category").lean();
     if (!banner) throw new ApiError(404, "Banner not found");
     res.status(200).json(new ApiResponse(200, banner, "Banner fetched successfully"));
   } catch (error) {
@@ -145,7 +145,7 @@ const reorderBanners = async (req, res) => {
 
     await logActivity(req, "Update", "Reorder banners");
 
-    const banners = await Banner.find().populate("category").sort({ order: 1, createdAt: -1 });
+    const banners = await Banner.find().populate("category").sort({ order: 1, createdAt: -1 }).lean();
     clearLandingPageCache();
     res.status(200).json(new ApiResponse(200, banners, "Banners reordered successfully"));
   } catch (error) {

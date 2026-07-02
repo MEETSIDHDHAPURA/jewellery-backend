@@ -302,7 +302,9 @@ const getCart = async (req, res) => {
       await syncCartItems(cart);
       // Recalculate discount to ensure validity
       await recalculateCartDiscount(cart);
-      await cart.save();
+      if (cart.isModified()) {
+        await cart.save();
+      }
       // Refetch with populated details
       cart = await Cart.findById(cart._id).populate({ path: "items.product", populate: { path: "category" } }).populate("items.diamond");
     }
