@@ -180,8 +180,8 @@ const seedDefaults = async (req, res) => {
     for (const cat of targetCategories) {
       const catId = cat._id.toString();
       const catName = (cat.name || "").toLowerCase();
-      const isRing = catName === "ring" || catName === "rings";
-      const isBracelet = catName === "bracelet" || catName === "bracelets";
+      const isRing = catName.includes("ring");
+      const isBracelet = catName.includes("bracelet");
 
       // Delete existing modifiers for this category to avoid mixed values (like old sizes)
       await PricingModifier.deleteMany({ category: catId });

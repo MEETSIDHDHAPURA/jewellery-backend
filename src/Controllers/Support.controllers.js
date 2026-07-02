@@ -23,42 +23,6 @@ exports.getAllTickets = async (req, res) => {
 
     let tickets = await Support.find(filter).sort({ createdAt: -1 });
 
-    // Seed dummy tickets ONLY if the search/status filter is empty AND database is empty
-    if (tickets.length === 0 && !search && (!status || status === "All")) {
-      const existingCount = await Support.countDocuments({});
-      if (existingCount === 0) {
-        const dummyTickets = [
-          {
-            name: "Amit Sharma",
-            email: "amit.sharma@example.com",
-            phone: "+91 98765 43210",
-            subject: "Custom Ring Inquiry",
-            message:
-              "Hi, I am looking to order a customized 18K white gold engagement ring with a 1.5 carat round cut diamond. Could you please share the design catalogs and tell me how much time it would take to manufacture?",
-          },
-          {
-            name: "Priya Patel",
-            email: "priya.patel@example.com",
-            phone: "+91 87654 32109",
-            subject: "Order Delivery Status Delay",
-            message:
-              "Hello Support Team, my order for the gold solitaire pendant (#ORD-8947) was supposed to arrive yesterday. The tracking link still shows in-transit. Can you please assist?",
-          },
-          {
-            name: "Rajesh Kumar",
-            email: "rajesh.kumar@example.com",
-            phone: "+91 76543 21098",
-            subject: "Certificate of Diamond Authenticity",
-            message:
-              "Thank you for the fast shipping of the princess cut diamond earrings! I received them today. However, I could not find the physical GIA authenticity certificate inside the package. Could you email me a digital copy or ship the certificate?",
-          },
-        ];
-
-        await Support.insertMany(dummyTickets);
-        tickets = await Support.find().sort({ createdAt: -1 });
-      }
-    }
-
     // Aggregate counts for stats cards
     const [totalAll, countPending, countInProgress, countResolved] = await Promise.all([
       Support.countDocuments({}),

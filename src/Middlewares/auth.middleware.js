@@ -20,7 +20,7 @@ const auth = (req, res, next) => {
 };
 
 // Strict authentication - returns 401 if token is invalid or missing
-const requireAuth = (req, res, next) => {
+const requireAuth = async (req, res, next) => {
   try {
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
@@ -28,7 +28,14 @@ const requireAuth = (req, res, next) => {
     }
     const token = authHeader.split(" ")[1];
     const decoded = jwt.verify(token, process.env.JWT_SECRET || "user_secret_key");
-    req.user = { _id: decoded.id, email: decoded.email };
+    
+    // Find user in DB to verify role and status
+    const user = await User.findById(decoded.id);
+    if (!user || user.isDeleted || !user.isActive) {
+      return res.status(401).json(new ApiError(401, "User account is invalid or suspended"));
+    }
+
+    req.user = { _id: user._id, email: user.email, role: user.role };
     next();
   } catch (error) {
     return res.status(401).json(new ApiError(401, "Invalid or expired authorization token"));
