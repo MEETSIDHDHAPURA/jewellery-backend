@@ -29,7 +29,7 @@ const createMakingCharge = async (req, res) => {
 
     await recalculateAndSavePrices([metal]);
 
-    await logActivity(req, "Create", `create making charge for ${charge.metal} with type ${charge.type} and value ${charge.value}`);
+    logActivity(req, "Create", `create making charge for ${charge.metal} with type ${charge.type} and value ${charge.value}`).catch(() => {});
 
     res.status(201).json(new ApiResponse(201, charge, "Making charge created successfully"));
   } catch (error) {
@@ -40,7 +40,7 @@ const createMakingCharge = async (req, res) => {
 // Get All Making Charges
 const getMakingCharges = async (req, res) => {
   try {
-    const charges = await MakingCharge.find().sort({ metal: 1 });
+    const charges = await MakingCharge.find().sort({ metal: 1 }).lean();
     res.status(200).json(new ApiResponse(200, charges, "Making charges fetched successfully"));
   } catch (error) {
     res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));
@@ -50,7 +50,7 @@ const getMakingCharges = async (req, res) => {
 // Get Making Charge By ID
 const getMakingChargeById = async (req, res) => {
   try {
-    const charge = await MakingCharge.findById(req.params.id);
+    const charge = await MakingCharge.findById(req.params.id).lean();
     if (!charge) {
       throw new ApiError(404, "Making charge not found");
     }
@@ -85,7 +85,7 @@ const updateMakingCharge = async (req, res) => {
 
     await recalculateAndSavePrices([charge.metal]);
 
-    await logActivity(req, "Update", `Update making charge of metal ${charge.metal}: value from ${oldValue} (${oldType}) to ${charge.value} (${charge.type})`);
+    logActivity(req, "Update", `Update making charge of metal ${charge.metal}: value from ${oldValue} (${oldType}) to ${charge.value} (${charge.type})`).catch(() => {});
 
     res.status(200).json(new ApiResponse(200, charge, "Making charge updated successfully"));
   } catch (error) {
@@ -103,7 +103,7 @@ const deleteMakingCharge = async (req, res) => {
 
     await recalculateAndSavePrices([charge.metal]);
 
-    await logActivity(req, "Delete", `Delete this making charge of metal ${charge.metal}`);
+    logActivity(req, "Delete", `Delete this making charge of metal ${charge.metal}`).catch(() => {});
 
     res.status(200).json(new ApiResponse(200, {}, "Making charge deleted successfully"));
   } catch (error) {
@@ -117,7 +117,7 @@ const GlobalConfig = require("../Models/GlobalConfig.Model.js");
 // Get Margin
 const getMargin = async (req, res) => {
   try {
-    const config = await GlobalConfig.findOne({ key: "margin_percentage" });
+    const config = await GlobalConfig.findOne({ key: "margin_percentage" }).lean();
     const margin = config ? config.value : 0;
     res.status(200).json(new ApiResponse(200, { margin }, "Margin fetched successfully"));
   } catch (error) {
@@ -145,7 +145,7 @@ const setMargin = async (req, res) => {
     await recalculateAndSavePrices();
     clearProductCache();
 
-    await logActivity(req, "Update", `Update profit margin from ${oldMargin}% to ${config.value}%`);
+    logActivity(req, "Update", `Update profit margin from ${oldMargin}% to ${config.value}%`).catch(() => {});
 
     res.status(200).json(new ApiResponse(200, { margin: config.value }, "Margin updated successfully"));
   } catch (error) {
@@ -161,7 +161,7 @@ const getCurrencyRates = async (req, res) => {
     if (cachedRates) {
       return res.status(200).json(new ApiResponse(200, cachedRates, "Currency rates fetched successfully"));
     }
-    const config = await GlobalConfig.findOne({ key: "currency_rates" });
+    const config = await GlobalConfig.findOne({ key: "currency_rates" }).lean();
     const rates = config ? config.value : { INR: 83.5, CAD: 1.36 };
     cachedRates = rates;
     res.status(200).json(new ApiResponse(200, rates, "Currency rates fetched successfully"));
@@ -186,7 +186,7 @@ const setCurrencyRates = async (req, res) => {
 
     cachedRates = config.value;
 
-    await logActivity(req, "Update", `Update currency rates: INR to ${INR}, CAD to ${CAD}`);
+    logActivity(req, "Update", `Update currency rates: INR to ${INR}, CAD to ${CAD}`).catch(() => {});
 
     res.status(200).json(new ApiResponse(200, config.value, "Currency rates updated successfully"));
   } catch (error) {

@@ -13,7 +13,7 @@ const createHeroText = async (req, res) => {
     }
 
     const newHeroText = await HeroText.create({ herotext });
-    await logActivity(req, "Create", `create hero text: ${newHeroText.herotext}`);
+    logActivity(req, "Create", `create hero text: ${newHeroText.herotext}`).catch(() => {});
     res.status(201).json(new ApiResponse(201, newHeroText, "HeroText created successfully"));
   } catch (error) {
     res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));
@@ -23,7 +23,7 @@ const createHeroText = async (req, res) => {
 // Get All HeroTexts
 const getAllHeroTexts = async (req, res) => {
   try {
-    const heroTexts = await HeroText.find();
+    const heroTexts = await HeroText.find().lean();
     res.status(200).json(new ApiResponse(200, heroTexts, "HeroTexts fetched successfully"));
   } catch (error) {
     res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));
@@ -34,7 +34,7 @@ const getAllHeroTexts = async (req, res) => {
 const getHeroTextById = async (req, res) => {
   try {
     const { id } = req.params;
-    const heroText = await HeroText.findById(id);
+    const heroText = await HeroText.findById(id).lean();
 
     if (!heroText) {
       throw new ApiError(404, "HeroText not found");
@@ -68,7 +68,7 @@ const updateHeroText = async (req, res) => {
       { new: true, runValidators: true }
     );
 
-    await logActivity(req, "Update", `Update hero text from "${oldText}" to "${heroText.herotext}"`);
+    logActivity(req, "Update", `Update hero text from "${oldText}" to "${heroText.herotext}"`).catch(() => {});
 
     res.status(200).json(new ApiResponse(200, heroText, "HeroText updated successfully"));
   } catch (error) {
@@ -86,7 +86,7 @@ const deleteHeroText = async (req, res) => {
       throw new ApiError(404, "HeroText not found");
     }
 
-    await logActivity(req, "Delete", `Delete this hero text: ${heroText.herotext}`);
+    logActivity(req, "Delete", `Delete this hero text: ${heroText.herotext}`).catch(() => {});
 
     res.status(200).json(new ApiResponse(200, {}, "HeroText deleted successfully"));
   } catch (error) {

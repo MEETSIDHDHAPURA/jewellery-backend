@@ -79,7 +79,7 @@ const createDiamondPrice = async (req, res) => {
       cetNumber,
     });
 
-    await logActivity(req, "Create", `create diamond price: ${diamond.diamondType} ${diamond.shape} ${diamond.carat} Carat ${diamond.clarity} ${diamond.color} - Price: ₹${diamond.price}`);
+    logActivity(req, "Create", `create diamond price: ${diamond.diamondType} ${diamond.shape} ${diamond.carat} Carat ${diamond.clarity} ${diamond.color} - Price: ₹${diamond.price}`).catch(() => {});
 
     res.status(201).json(new ApiResponse(201, diamond, "Diamond price created successfully"));
   } catch (error) {
@@ -130,7 +130,7 @@ const bulkCreateDiamondPrices = async (req, res) => {
     const bulkResult = await DiamondPrice.bulkWrite(bulkOps, { ordered: false });
     const totalProcessed = (bulkResult.modifiedCount || 0) + (bulkResult.upsertedCount || 0);
 
-    await logActivity(req, "Create", `bulk create ${totalProcessed} diamond prices`);
+    logActivity(req, "Create", `bulk create ${totalProcessed} diamond prices`).catch(() => {});
 
     res.status(200).json(new ApiResponse(200, { count: totalProcessed }, `${totalProcessed} diamond prices saved successfully`));
   } catch (error) {
@@ -419,7 +419,7 @@ const updateDiamondPrice = async (req, res) => {
     const actionDesc = priceChanged
       ? `Update diamond price for ${name} from ₹${oldPrice} to ₹${diamond.price}`
       : `Update diamond price details for ${name}`;
-    await logActivity(req, "Update", actionDesc);
+    logActivity(req, "Update", actionDesc).catch(() => {});
 
     res.status(200).json(new ApiResponse(200, diamond, "Diamond price updated successfully"));
   } catch (error) {
@@ -460,7 +460,7 @@ const deleteDiamondPrice = async (req, res) => {
     if (diamond.non) deletePromises.push(deleteFromCloudinary(diamond.non));
     if (deletePromises.length > 0) await Promise.all(deletePromises);
 
-    await logActivity(req, "Delete", `Delete diamond price of: ${diamond.diamondType || "Lab Grown"} ${diamond.shape} ${diamond.carat} Carat ${diamond.clarity} ${diamond.color}`);
+    logActivity(req, "Delete", `Delete diamond price of: ${diamond.diamondType || "Lab Grown"} ${diamond.shape} ${diamond.carat} Carat ${diamond.clarity} ${diamond.color}`).catch(() => {});
 
     res.status(200).json(new ApiResponse(200, {}, "Diamond price deleted successfully"));
   } catch (error) {

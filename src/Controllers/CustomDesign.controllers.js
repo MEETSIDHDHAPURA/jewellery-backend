@@ -31,7 +31,8 @@ exports.getAllCustomDesigns = async (req, res) => {
       CustomDesign.find(filter)
         .sort({ createdAt: -1 })
         .skip(skip)
-        .limit(limitNum),
+        .limit(limitNum)
+        .lean(),
       CustomDesign.countDocuments(filter),
       CustomDesign.countDocuments({}),
       CustomDesign.countDocuments({ $or: [{ status: "Pending" }, { status: { $exists: false } }, { status: "" }] }),
@@ -67,7 +68,7 @@ exports.getAllCustomDesigns = async (req, res) => {
 exports.getCustomDesignById = async (req, res) => {
   try {
     const { id } = req.params;
-    const design = await CustomDesign.findById(id);
+    const design = await CustomDesign.findById(id).lean();
 
     if (!design) {
       return res.status(404).json({

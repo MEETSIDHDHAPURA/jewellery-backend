@@ -23,10 +23,10 @@ const clearLandingPageCache = () => {
 // Get all sections with status (self-healing/seeding if empty)
 const getAllHomepageSections = async (req, res) => {
   try {
-    let sections = await HomepageSection.find();
+    let sections = await HomepageSection.find().lean();
     if (sections.length === 0) {
       await seedHomepageSections();
-      sections = await HomepageSection.find();
+      sections = await HomepageSection.find().lean();
     }
     res.status(200).json(new ApiResponse(200, sections, "Homepage sections fetched successfully"));
   } catch (error) {
@@ -124,10 +124,10 @@ const getLandingPageData = async (req, res) => {
     }
 
     // 1. Get all sections and seed if empty
-    let sections = await HomepageSection.find().sort({ display_order: 1 });
+    let sections = await HomepageSection.find().sort({ display_order: 1 }).lean();
     if (sections.length === 0) {
       await seedHomepageSections();
-      sections = await HomepageSection.find().sort({ display_order: 1 });
+      sections = await HomepageSection.find().sort({ display_order: 1 }).lean();
     }
 
     // 2. Build status mapping (true for active/on, false for inactive/off)
@@ -146,12 +146,13 @@ const getLandingPageData = async (req, res) => {
       if (!sectionStatus.hero) return [];
       return Banner.find({ isActive: true })
         .populate("category", "name _id")
-        .sort({ order: 1, createdAt: -1 });
+        .sort({ order: 1, createdAt: -1 })
+        .lean();
     };
 
     const getCategoryShowcase = async () => {
       if (!sectionStatus.category_showcase) return [];
-      const categories = await Category.find({ isActive: true });
+      const categories = await Category.find({ isActive: true }).lean();
       const desiredOrder = [
         "bracelet",
         "ring",
@@ -355,7 +356,7 @@ const getLandingPageData = async (req, res) => {
     };
 
     const getHeroTexts = async () => {
-      const docs = await HeroText.find();
+      const docs = await HeroText.find().lean();
       return docs.map(d => d.herotext);
     };
 

@@ -5,7 +5,7 @@ const logActivity = require("../Utils/logActivity");
 // Get all metal rates
 exports.getMetalRates = async (req, res) => {
   try {
-    const rates = await MetalRate.find().sort({ metal: 1, purity: 1 });
+    const rates = await MetalRate.find().sort({ metal: 1, purity: 1 }).lean();
     res.status(200).json({ success: true, data: rates });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -24,7 +24,7 @@ exports.updateMetalRates = async (req, res) => {
     // Fetch old rates
     const oldRates = await MetalRate.find({
       $or: rates.map(r => ({ metal: r.metal, purity: r.purity }))
-    });
+    }).lean();
     
     // Create a lookup map of old rates
     const oldRatesMap = {};
@@ -55,7 +55,7 @@ exports.updateMetalRates = async (req, res) => {
       return `${r.metal} (${r.purity}) from ₹${oldPrice} to ₹${r.pricePerGram}/g`;
     }).join(", ");
 
-    await logActivity(req, "Update", `Update metal rates: ${logDetails}`);
+    logActivity(req, "Update", `Update metal rates: ${logDetails}`).catch(() => {});
 
     res.status(200).json({ success: true, message: "Rates updated successfully", data: updatedRates });
   } catch (error) {

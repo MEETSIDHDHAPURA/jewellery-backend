@@ -111,7 +111,7 @@ const createCoupon = async (req, res) => {
       image: imageUrl,
     });
 
-    await logActivity(req, "Create", `create coupon ${coupon.code}`);
+    logActivity(req, "Create", `create coupon ${coupon.code}`).catch(() => {});
 
     res.status(201).json(new ApiResponse(201, coupon, "Coupon created successfully"));
   } catch (error) {
@@ -190,7 +190,7 @@ const updateCoupon = async (req, res) => {
     const action = originalCode !== coupon.code
       ? `Update coupon code ${originalCode} to ${coupon.code}`
       : `Update coupon: ${coupon.code}`;
-    await logActivity(req, "Update", action);
+    logActivity(req, "Update", action).catch(() => {});
 
     const couponDoc = await Coupon.findById(coupon._id).lean();
     const populated = await populateCouponCategories(couponDoc);
@@ -205,7 +205,7 @@ const deleteCoupon = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const coupon = await Coupon.findById(id);
+    const coupon = await Coupon.findById(id).lean();
     if (!coupon) throw new ApiError(404, "Coupon not found");
 
     // Clean up image from Cloudinary
@@ -215,7 +215,7 @@ const deleteCoupon = async (req, res) => {
 
     await Coupon.findByIdAndDelete(id);
 
-    await logActivity(req, "Delete", `Delete this coupon ${coupon.code}`);
+    logActivity(req, "Delete", `Delete this coupon ${coupon.code}`).catch(() => {});
 
     res.status(200).json(new ApiResponse(200, null, "Coupon deleted successfully"));
   } catch (error) {
@@ -296,7 +296,7 @@ const toggleCouponStatus = async (req, res) => {
     coupon.isActive = !coupon.isActive;
     await coupon.save();
 
-    await logActivity(req, "Update", `Update coupon status of ${coupon.code} to ${coupon.isActive ? "Active" : "Inactive"}`);
+    logActivity(req, "Update", `Update coupon status of ${coupon.code} to ${coupon.isActive ? "Active" : "Inactive"}`).catch(() => {});
 
     res.status(200).json(
       new ApiResponse(200, coupon, `Coupon ${coupon.isActive ? "activated" : "deactivated"} successfully`)
@@ -714,7 +714,7 @@ const sendCouponEmail = async (req, res) => {
     </html>
     `;
 
-    await sendMail(email, `🎁 Your Exclusive ${discountText} Discount Coupon from ${storeName}!`, emailHtml);
+    sendMail(email, `🎁 Your Exclusive ${discountText} Discount Coupon from ${storeName}!`, emailHtml).catch(() => {});
 
     res.status(200).json(new ApiResponse(200, null, "Coupon sent successfully"));
   } catch (error) {
