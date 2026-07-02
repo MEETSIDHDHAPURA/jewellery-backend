@@ -148,11 +148,13 @@ const updateOrderStatus = async (req, res) => {
   }
 };
 
-// Get Order By ID
 const getOrderById = async (req, res) => {
   try {
     const { id } = req.params;
-    let order = await Order.findById(id)
+    const isObjectId = id.match(/^[0-9a-fA-F]{24}$/);
+    const query = isObjectId ? { $or: [{ _id: id }, { orderId: id }] } : { orderId: id };
+
+    let order = await Order.findOne(query)
       .populate("items.product")
       .populate("items.diamond")
       .populate("user");
@@ -178,7 +180,7 @@ const getOrderById = async (req, res) => {
           await order.save();
 
           // Re-populate and query to return updated order details
-          order = await Order.findById(id)
+          order = await Order.findById(order._id)
             .populate("items.product")
             .populate("items.diamond")
             .populate("user");
@@ -263,6 +265,99 @@ const deletePendingOrder = async (req, res) => {
   }
 };
 
+// Verify Payment Token (single-use route protection)
+const verifyPaymentToken = async (req, res) => {
+  try {
+    const { orderId, token } = req.query;
+
+    if (!orderId || !token) {
+      return res.status(200).json(new ApiResponse(200, { valid: false }, "Missing orderId or token"));
+    }
+
+    const order = await Order.findById(orderId);
+    if (!order) {
+      return res.status(200).json(new ApiResponse(200, { valid: false }, "Order not found"));
+    }
+
+    if (!order.paymentToken || order.paymentToken !== token) {
+      return res.status(200).json(new ApiResponse(200, { valid: false }, "Invalid or expired token"));
+    }
+
+    // Sync payment status from Stripe if order is still Pending but payment has been completed
+    if (order.paymentStatus === "Pending" && order.paymentId) {
+      try {
+        const stripeObj = require("stripe")(process.env.STRIPE_SECRET_KEY);
+        const session = await stripeObj.checkout.sessions.retrieve(order.paymentId);
+        if (session && session.payment_status === "paid") {
+          order.paymentStatus = "Completed";
+          order.paymentId = session.payment_intent || session.id;
+          await order.save();
+
+          // ─── Manage Diamond Stock ───
+          for (const item of order.items) {
+            if (item.diamond) {
+              await DiamondPrice.findByIdAndUpdate(
+                item.diamond,
+                [
+                  {
+                    $set: {
+                      stock: { $subtract: ["$stock", item.quantity || 1] }
+                    }
+                  },
+                  {
+                    $set: {
+                      isSoldOut: {
+                        $cond: {
+                          if: { $lte: ["$stock", 0] },
+                          then: true,
+                          else: false
+                        }
+                      }
+                    }
+                  }
+                ],
+                { returnDocument: "after", updatePipeline: true }
+              );
+            }
+          }
+
+          // ─── Coupon Usage Logging ───
+          if (order.couponCode) {
+            const coupon = await Coupon.findOne({ code: order.couponCode.toUpperCase() });
+            if (coupon) {
+              coupon.usedCount = (coupon.usedCount || 0) + 1;
+              await coupon.save();
+
+              const userId = order.user;
+              if (userId) {
+                await CouponUsage.create({
+                  coupon: coupon._id,
+                  user: userId,
+                  order: order._id,
+                  code: coupon.code,
+                  discountType: coupon.discountType,
+                  discountAmount: order.discountAmount || 0,
+                  orderTotal: order.totalAmount || 0,
+                });
+              }
+            }
+          }
+        }
+      } catch (stripeErr) {
+        console.error("Failed to check Stripe session status in verifyPaymentToken:", stripeErr.message);
+      }
+    }
+
+    // Consume the token (single-use)
+    order.paymentToken = null;
+    await order.save();
+
+    return res.status(200).json(new ApiResponse(200, { valid: true, paymentStatus: order.paymentStatus, orderId: order.orderId }, "Token verified"));
+  } catch (error) {
+    res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));
+  }
+};
+
 module.exports = {
   createOrder,
   getAllOrders,
@@ -270,4 +365,5 @@ module.exports = {
   updateOrderStatus,
   getOrderById,
   deletePendingOrder,
+  verifyPaymentToken,
 };

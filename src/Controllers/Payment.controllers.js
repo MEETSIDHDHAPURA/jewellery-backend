@@ -1,4 +1,5 @@
 const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
+const crypto = require("crypto");
 const Order = require("../Models/Order.Model");
 const User = require("../Models/User.Model");
 const ApiResponse = require("../Utils/ApiResponse");
@@ -28,6 +29,10 @@ const createCheckoutSession = async (req, res) => {
 
     const amountInCents = Math.round(convertedAmount * 100);
 
+    // Generate single-use payment token for route protection
+    const paymentToken = crypto.randomUUID();
+
+    const clientUrl = process.env.CLIENT_URL || "http://localhost:3000";
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ["card"],
       line_items: [
@@ -43,14 +48,15 @@ const createCheckoutSession = async (req, res) => {
         },
       ],
       mode: "payment",
-      success_url: `${process.env.CLIENT_URL || "http://localhost:3000"}/cart?success=true&orderId=${order._id}`,
-      cancel_url: `${process.env.CLIENT_URL || "http://localhost:3000"}/cart?canceled=true&orderId=${order._id}`,
+      success_url: `${clientUrl}/order/success?orderId=${order._id}&token=${paymentToken}`,
+      cancel_url: `${clientUrl}/order/failed?orderId=${order._id}&token=${paymentToken}`,
       metadata: {
         orderId: order._id.toString(),
       },
     });
 
     order.paymentId = session.id;
+    order.paymentToken = paymentToken;
     await order.save();
 
     res.status(200).json(

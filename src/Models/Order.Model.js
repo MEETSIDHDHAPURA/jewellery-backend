@@ -81,6 +81,10 @@ const orderSchema = new mongoose.Schema(
       type: Number,
       default: 1,
     },
+    paymentToken: {
+      type: String,
+      default: null,
+    },
   },
   { timestamps: true }
 );

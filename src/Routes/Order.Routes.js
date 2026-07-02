@@ -7,6 +7,7 @@ router.post("/create", auth, orderController.createOrder); // support guest user
 router.get("/all", adminOnly, orderController.getAllOrders);
 router.get("/user/:userId", requireAuth, orderController.getUserOrders);
 router.put("/status/:id", adminOnly, orderController.updateOrderStatus);
+router.get("/verify-payment", orderController.verifyPaymentToken); // no auth needed — token itself is the auth
 router.get("/:id", auth, orderController.getOrderById); // support guest order fetching with optional auth
 router.delete("/cancel-pending/:id", auth, orderController.deletePendingOrder);
 
