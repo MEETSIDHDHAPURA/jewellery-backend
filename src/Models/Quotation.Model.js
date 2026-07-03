@@ -21,6 +21,10 @@ const quotationSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
+    countryCode: {
+      type: String,
+      default: "",
+    },
     metalType: {
       type: String,
     },
@@ -114,5 +118,8 @@ const quotationSchema = new mongoose.Schema(
     suppressReservedKeysWarning: true,
   }
 );
+
+quotationSchema.index({ createdAt: -1 });
+quotationSchema.index({ customerName: 1 });
 
 module.exports = mongoose.model("Quotation", quotationSchema);

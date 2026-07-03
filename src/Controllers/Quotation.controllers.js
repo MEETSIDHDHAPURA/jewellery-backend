@@ -11,6 +11,7 @@ const createQuotation = async (req, res) => {
       customerName,
       email,
       phone,
+      countryCode,
       metalType,
       purity,
       weight,
@@ -71,6 +72,7 @@ const createQuotation = async (req, res) => {
       customerName,
       email,
       phone,
+      countryCode,
       metalType,
       purity,
       weight,
@@ -141,7 +143,7 @@ const deleteQuotation = async (req, res) => {
         { id: id },
         ...(isMongoId ? [{ _id: id }] : [])
       ]
-    });
+    }).lean();
     
     if (!quotation) {
       throw new ApiError(404, "Quotation not found");
@@ -168,7 +170,7 @@ const updateQuotation = async (req, res) => {
       },
       { $set: req.body },
       { new: true, runValidators: true }
-    );
+    ).lean();
 
     if (!quotation) {
       throw new ApiError(404, "Quotation not found");
@@ -200,7 +202,7 @@ const getQuotationById = async (req, res) => {
   } catch (error) {
     res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));
   }
-};
+}; 
 
 module.exports = {
   createQuotation,
