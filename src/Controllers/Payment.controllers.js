@@ -97,11 +97,29 @@ const stripeWebhook = async (req, res) => {
 
       if (orderId) {
         const order = await Order.findById(orderId);
+        console.log(order.paymentStatus)
         if (order) {
           if (order.paymentStatus !== "Completed") {
             order.paymentStatus = "Completed";
             order.paymentId = session.payment_intent || session.id;
             await order.save();
+
+            // ─── Clear User's Cart ───
+            try {
+              const Cart = require("../Models/Cart.Model");
+              const cart = await Cart.findOne({ user: order.user });
+              if (cart) {
+                cart.items = [];
+                cart.couponCode = null;
+                cart.discountAmount = 0;
+                cart.discountType = null;
+                cart.discountValue = 0;
+                cart.freeShipping = false;
+                await cart.save();
+              }
+            } catch (cartError) {
+              console.error("Error clearing user cart:", cartError);
+            }
 
             // ─── Manage Diamond Stock ───
             for (const item of order.items) {

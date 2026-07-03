@@ -2,6 +2,7 @@ require("dotenv").config();
 const app = require("./app");
 const connectDB = require("./Database/Connection");
 const { startCurrencyCron } = require("./Utils/CurrencyCron");
+const { startPaymentCron } = require("./Utils/paymentCron");
 
 const PORT = process.env.PORT || 3000;
 
@@ -9,6 +10,7 @@ const startServer = async () => {
   try {
     await connectDB();
     startCurrencyCron();
+    startPaymentCron();
     
 
 

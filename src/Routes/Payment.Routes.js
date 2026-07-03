@@ -6,7 +6,7 @@ const { auth } = require("../Middlewares/auth.middleware");
 // Webhook endpoint needs raw request parser instead of global express.json()
 router.post(
   "/webhook",
-  express.raw({ type: "application/json" }),
+  express.raw({ type: "*/*" }),
   paymentController.stripeWebhook
 );
 

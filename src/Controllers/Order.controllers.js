@@ -181,6 +181,23 @@ const getOrderById = async (req, res) => {
           order.paymentId = session.payment_intent || session.id;
           await order.save();
 
+          // ─── Clear User's Cart ───
+          try {
+            const Cart = require("../Models/Cart.Model");
+            const cart = await Cart.findOne({ user: order.user });
+            if (cart) {
+              cart.items = [];
+              cart.couponCode = null;
+              cart.discountAmount = 0;
+              cart.discountType = null;
+              cart.discountValue = 0;
+              cart.freeShipping = false;
+              await cart.save();
+            }
+          } catch (cartError) {
+            console.error("Error clearing user cart:", cartError);
+          }
+
           // Send Confirmation Email
           try {
             const sendOrderConfirmationEmail = require("../Utils/sendOrderEmail");
@@ -304,6 +321,23 @@ const verifyPaymentToken = async (req, res) => {
           order.paymentStatus = "Completed";
           order.paymentId = session.payment_intent || session.id;
           await order.save();
+
+          // ─── Clear User's Cart ───
+          try {
+            const Cart = require("../Models/Cart.Model");
+            const cart = await Cart.findOne({ user: order.user });
+            if (cart) {
+              cart.items = [];
+              cart.couponCode = null;
+              cart.discountAmount = 0;
+              cart.discountType = null;
+              cart.discountValue = 0;
+              cart.freeShipping = false;
+              await cart.save();
+            }
+          } catch (cartError) {
+            console.error("Error clearing user cart:", cartError);
+          }
 
           // Send Confirmation Email
           try {
