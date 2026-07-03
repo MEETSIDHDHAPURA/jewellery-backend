@@ -13,7 +13,7 @@ const sendMail = async (to, subject, html) => {
     });
 
     const info = await transporter.sendMail({
-      from: `"${process.env.STORE_NAME || "Praya Diamonds"}" <${process.env.SMTP_USER}>`,
+      from: `"Praya Diamond" <${process.env.SMTP_USER}>`,
       to,
       subject,
       html,

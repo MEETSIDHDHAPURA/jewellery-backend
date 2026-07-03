@@ -181,6 +181,14 @@ const getOrderById = async (req, res) => {
           order.paymentId = session.payment_intent || session.id;
           await order.save();
 
+          // Send Confirmation Email
+          try {
+            const sendOrderConfirmationEmail = require("../Utils/sendOrderEmail");
+            sendOrderConfirmationEmail(order._id);
+          } catch (emailError) {
+            console.error("Error sending order confirmation email:", emailError);
+          }
+
           // Re-populate and query to return updated order details
           order = await Order.findById(order._id)
             .populate("items.product")
@@ -296,6 +304,14 @@ const verifyPaymentToken = async (req, res) => {
           order.paymentStatus = "Completed";
           order.paymentId = session.payment_intent || session.id;
           await order.save();
+
+          // Send Confirmation Email
+          try {
+            const sendOrderConfirmationEmail = require("../Utils/sendOrderEmail");
+            sendOrderConfirmationEmail(order._id);
+          } catch (emailError) {
+            console.error("Error sending order confirmation email:", emailError);
+          }
 
           // ─── Manage Diamond Stock ───
           for (const item of order.items) {
