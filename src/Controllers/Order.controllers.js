@@ -75,13 +75,60 @@ const createOrder = async (req, res) => {
 // Get All Orders (Admin)
 const getAllOrders = async (req, res) => {
   try {
-    const orders = await Order.find({ paymentStatus: { $ne: "Pending" } })
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.max(1, Math.min(100, parseInt(req.query.limit) || 10));
+    const skip = (page - 1) * limit;
+
+    const filter = {};
+
+    // Order status filter
+    if (req.query.orderStatus && req.query.orderStatus !== "all") {
+      filter.orderStatus = req.query.orderStatus;
+    }
+
+    // Payment status filter (overrides the base $ne Pending filter when specific status is selected)
+    if (req.query.paymentStatus && req.query.paymentStatus !== "all") {
+      filter.paymentStatus = req.query.paymentStatus;
+    } else {
+      filter.paymentStatus = { $ne: "Pending" };
+    }
+
+    // Search filter (orderId, customer name, email)
+    if (req.query.search && req.query.search.trim()) {
+      const searchRegex = new RegExp(req.query.search.trim(), "i");
+      // First find matching users
+      const User = mongoose.model("User");
+      const matchingUsers = await User.find({
+        $or: [{ name: searchRegex }, { email: searchRegex }],
+      }).select("_id").lean();
+      const userIds = matchingUsers.map((u) => u._id);
+
+      filter.$or = [
+        { orderId: searchRegex },
+      ];
+      if (userIds.length > 0) {
+        filter.$or.push({ user: { $in: userIds } });
+      }
+    }
+
+    const total = await Order.countDocuments(filter);
+    const totalPages = Math.ceil(total / limit);
+
+    const orders = await Order.find(filter)
       .populate("user")
       .populate("items.product")
       .populate("items.diamond")
       .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
       .lean();
-    res.status(200).json(new ApiResponse(200, orders, "Orders fetched successfully"));
+
+    res.status(200).json(
+      new ApiResponse(200, {
+        orders,
+        pagination: { total, page, limit, pages: totalPages },
+      }, "Orders fetched successfully")
+    );
   } catch (error) {
     res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));
   }

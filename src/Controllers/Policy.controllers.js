@@ -1,6 +1,7 @@
 const Policy = require("../Models/Policy.Model");
 const ApiResponse = require("../Utils/ApiResponse");
 const ApiError = require("../Utils/ApiError");
+const logActivity = require("../Utils/logActivity");
 
 // Update or Create Policy
 const updatePolicy = async (req, res) => {
@@ -18,6 +19,7 @@ const updatePolicy = async (req, res) => {
     );
 
     res.status(200).json(new ApiResponse(200, policy, `${type} updated successfully`));
+    logActivity(req, "Update", `Update policy: ${type}`).catch(() => {});
   } catch (error) {
     res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));
   }

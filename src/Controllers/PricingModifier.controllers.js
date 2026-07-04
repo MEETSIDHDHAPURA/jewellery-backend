@@ -140,8 +140,25 @@ const updateModifier = async (req, res) => {
  */
 const deleteModifier = async (req, res) => {
   try {
-    const modifier = await PricingModifier.findByIdAndDelete(req.params.id);
+    const modifier = await PricingModifier.findById(req.params.id);
     if (!modifier) throw new ApiError(404, "Modifier not found");
+
+    if (modifier.attributeType === "size") {
+      const productUsingSize = await Product.findOne({
+        category: modifier.category,
+        isDeleted: { $ne: true },
+        allowedSizes: modifier.value,
+      });
+
+      if (productUsingSize) {
+        throw new ApiError(
+          400,
+          "Cannot delete size modifier because it is currently assigned to a product in this category"
+        );
+      }
+    }
+
+    await PricingModifier.findByIdAndDelete(req.params.id);
 
     clearProductCache();
     res
