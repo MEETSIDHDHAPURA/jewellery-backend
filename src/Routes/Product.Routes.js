@@ -35,7 +35,6 @@ router.post(
   productController.createProduct
 );
 
-router.post("/bulk", adminOnly, productController.bulkCreateProducts);
 router.post("/upload-media", adminOnly, upload.any(), productController.uploadProductMedia);
 
 router.get("/", productController.getAllProducts);

@@ -351,7 +351,15 @@ const validateCoupon = async (req, res) => {
 
     // 6. Check minimum order amount
     if (orderAmount !== undefined && orderAmount < coupon.minOrderAmount) {
-      throw new ApiError(400, `Minimum order amount of ₹${coupon.minOrderAmount} required`);
+      let currencySymbol = "₹";
+      const currencyCountry = country || coupon.country || "all";
+      const upperCountry = String(currencyCountry).toUpperCase();
+      if (upperCountry === "USA" || upperCountry === "USD") {
+        currencySymbol = "$";
+      } else if (upperCountry === "CANADA" || upperCountry === "CAD") {
+        currencySymbol = "CA$";
+      }
+      throw new ApiError(400, `Minimum order amount of ${currencySymbol}${coupon.minOrderAmount} required`);
     }
 
     // 7. Check applicable categories

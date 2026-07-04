@@ -6,6 +6,7 @@ const GlobalConfig = require("../Models/GlobalConfig.Model");
 const ApiResponse = require("../Utils/ApiResponse");
 const ApiError = require("../Utils/ApiError");
 const { clearProductCache } = require("./Product.controllers");
+const mongoose = require("mongoose");
 
 /**
  * Get All Pricing Modifiers (grouped by attributeType)
@@ -329,6 +330,8 @@ const calculatePrice = async (req, res) => {
       }
     }
 
+    const isValidCategory = categoryId && mongoose.Types.ObjectId.isValid(categoryId);
+
     const pBasePrice = prod ? (prod.basePrice || 0) : (Number(basePrice) || 0);
     const pSilverBasePrice = prod ? (prod.silverBasePrice || 0) : (Number(silverBasePrice) || 0);
 
@@ -425,7 +428,7 @@ const calculatePrice = async (req, res) => {
 
     // 4. Calculate Color flat modifier
     let colorModifier = 0;
-    if (selectedColor) {
+    if (selectedColor && isValidCategory) {
       const modifier = await PricingModifier.findOne({
         category: categoryId,
         attributeType: "color",
@@ -439,7 +442,7 @@ const calculatePrice = async (req, res) => {
 
     // 5. Calculate Clarity flat modifier
     let clarityModifier = 0;
-    if (selectedClarity) {
+    if (selectedClarity && isValidCategory) {
       const modifier = await PricingModifier.findOne({
         category: categoryId,
         attributeType: "clarity",
@@ -453,7 +456,7 @@ const calculatePrice = async (req, res) => {
 
     // 6. Calculate Size flat modifier
     let sizeModifier = 0;
-    if (selections.size) {
+    if (selections.size && isValidCategory) {
       const modifier = await PricingModifier.findOne({
         category: categoryId,
         attributeType: "size",

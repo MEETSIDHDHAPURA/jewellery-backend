@@ -97,8 +97,8 @@ const stripeWebhook = async (req, res) => {
 
       if (orderId) {
         const order = await Order.findById(orderId);
-        console.log(order.paymentStatus)
         if (order) {
+          console.log(order.paymentStatus)
           if (order.paymentStatus !== "Completed") {
             order.paymentStatus = "Completed";
             order.paymentId = session.payment_intent || session.id;
