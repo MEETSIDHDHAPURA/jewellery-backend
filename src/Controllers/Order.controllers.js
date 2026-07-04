@@ -1,3 +1,4 @@
+const mongoose = require("mongoose");
 const Order = require("../Models/Order.Model");
 const Coupon = require("../Models/Coupon.Model");
 const CouponUsage = require("../Models/CouponUsage.Model");
@@ -114,7 +115,9 @@ const updateOrderStatus = async (req, res) => {
     const { id } = req.params;
     const { orderStatus, paymentStatus, trackingId, trackingLink } = req.body;
 
-    const order = await Order.findById(id);
+    const isObjectId = mongoose.Types.ObjectId.isValid(id);
+    const query = isObjectId ? { $or: [{ _id: id }, { orderId: id }] } : { orderId: id };
+    const order = await Order.findOne(query);
     if (!order) throw new ApiError(404, "Order not found");
 
     const originalStatus = order.orderStatus;
@@ -153,7 +156,7 @@ const updateOrderStatus = async (req, res) => {
 const getOrderById = async (req, res) => {
   try {
     const { id } = req.params;
-    const isObjectId = id.match(/^[0-9a-fA-F]{24}$/);
+    const isObjectId = mongoose.Types.ObjectId.isValid(id);
     const query = isObjectId ? { $or: [{ _id: id }, { orderId: id }] } : { orderId: id };
 
     let order = await Order.findOne(query)
@@ -277,7 +280,9 @@ const getOrderById = async (req, res) => {
 const deletePendingOrder = async (req, res) => {
   try {
     const { id } = req.params;
-    const order = await Order.findById(id);
+    const isObjectId = mongoose.Types.ObjectId.isValid(id);
+    const query = isObjectId ? { $or: [{ _id: id }, { orderId: id }] } : { orderId: id };
+    const order = await Order.findOne(query);
     if (!order) {
       throw new ApiError(404, "Order not found");
     }
@@ -287,7 +292,7 @@ const deletePendingOrder = async (req, res) => {
       throw new ApiError(400, "Cannot delete a completed or failed order");
     }
 
-    await Order.findByIdAndDelete(id);
+    await Order.findByIdAndDelete(order._id);
     res.status(200).json(new ApiResponse(200, null, "Pending order cancelled and deleted successfully"));
   } catch (error) {
     res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));
@@ -303,7 +308,9 @@ const verifyPaymentToken = async (req, res) => {
       return res.status(200).json(new ApiResponse(200, { valid: false }, "Missing orderId or token"));
     }
 
-    const order = await Order.findById(orderId);
+    const isObjectId = mongoose.Types.ObjectId.isValid(orderId);
+    const query = isObjectId ? { $or: [{ _id: orderId }, { orderId: orderId }] } : { orderId: orderId };
+    const order = await Order.findOne(query);
     if (!order) {
       return res.status(200).json(new ApiResponse(200, { valid: false }, "Order not found"));
     }
