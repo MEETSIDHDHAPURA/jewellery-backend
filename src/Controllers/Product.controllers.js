@@ -66,6 +66,158 @@ const parseBoolean = (val, defaultVal = false) => {
 // Helper to escape regex special characters
 const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
+/**
+ * Calculate the BOM price for a product's default selected variant.
+ * Mirrors the frontend calculateBOMPrice logic in product-card.tsx.
+ * Default variant: 14K Yellow Gold if available, otherwise first allowedMetal.
+ * Default diamond: Lab Grown if available, first carat.
+ */
+const calculateDefaultBOMPrice = (product, globalMeta) => {
+  if (!product) return 0;
+  const allowedMetals = product.allowedMetals || [];
+  if (allowedMetals.length === 0) return product.Price || 0;
+
+  const { metalRates = [], makingCharges = [], margin = 0, pricingModifiers = [] } = globalMeta;
+
+  // 1. Determine selected metal (default to 14K if available)
+  const initialMetalStr = allowedMetals[0] || '';
+  const has14k = allowedMetals.some(m => m.toLowerCase().includes('14k'));
+  const selectedMetalFull = has14k
+    ? (allowedMetals.find(m => m.toLowerCase().includes('14k')) || initialMetalStr)
+    : initialMetalStr;
+
+  const selectedMetalVal = selectedMetalFull || '';
+  const isSilver = selectedMetalVal.toLowerCase().includes('silver');
+  const isPlatinum = selectedMetalVal.toLowerCase().includes('platinum');
+
+  // 2. Determine activeWeight
+  let pWeight = 0;
+  if (selectedMetalVal) {
+    if (isSilver) {
+      pWeight = product.weightSilver || 0;
+    } else if (isPlatinum) {
+      pWeight = product.weightPlatinum || 0;
+    } else {
+      const purities = ['10K', '14K', '18K', '20K', '22K', '24K'];
+      const searchPurity = purities.find(pur => selectedMetalVal.includes(pur)) || '18K';
+      if (searchPurity === '10K') pWeight = product.weight10K || 0;
+      else if (searchPurity === '14K') pWeight = product.weight14K || 0;
+      else if (searchPurity === '18K') pWeight = product.weight18K || 0;
+      else if (searchPurity === '22K') pWeight = product.weight22K || 0;
+      else pWeight = product.weight || 0;
+    }
+  } else {
+    pWeight = product.weight || 0;
+  }
+
+  // 3. Parse Metal Selection for rate lookup
+  let searchPurity = '18K';
+  let searchMetal = 'Yellow Gold';
+  if (isSilver) {
+    searchPurity = '925';
+    searchMetal = 'Silver';
+  } else if (isPlatinum) {
+    searchPurity = 'PT950';
+    searchMetal = 'Platinum';
+  } else {
+    const purities = ['10K', '14K', '18K', '20K', '22K', '24K'];
+    searchPurity = purities.find(pur => selectedMetalVal.includes(pur)) || '18K';
+    if (selectedMetalVal.toLowerCase().includes('white')) searchMetal = 'White Gold';
+    else if (selectedMetalVal.toLowerCase().includes('rose')) searchMetal = 'Rose Gold';
+    else searchMetal = 'Yellow Gold';
+  }
+
+  // 4. Calculate Metal Cost
+  let metalPricePerGram = 0;
+  if (selectedMetalVal) {
+    const rateDoc = metalRates.find(r => r.metal === searchMetal && r.purity === searchPurity);
+    if (rateDoc) {
+      metalPricePerGram = rateDoc.pricePerGram;
+    } else {
+      if (isSilver) metalPricePerGram = 80;
+      else if (isPlatinum) metalPricePerGram = 4000;
+      else {
+        if (searchPurity === '24K') metalPricePerGram = 7500;
+        else if (searchPurity === '22K') metalPricePerGram = 6875;
+        else if (searchPurity === '18K') metalPricePerGram = 5625;
+        else if (searchPurity === '14K') metalPricePerGram = 4375;
+        else metalPricePerGram = 3125;
+      }
+    }
+  }
+  const metalCost = pWeight * metalPricePerGram;
+
+  // 5. Calculate Making Cost
+  let makingCostRate = 0;
+  if (selectedMetalVal) {
+    const mcDoc = makingCharges.find(mc => mc.metal === searchMetal);
+    if (mcDoc) makingCostRate = mcDoc.value || 0;
+  }
+  const makingCost = pWeight * makingCostRate;
+
+  // 6. Determine selected carat & type
+  const hasLab = product.diamondOptions?.some(opt => opt.diamondType === 'Lab Grown');
+  const hasNatural = product.diamondOptions?.some(opt => opt.diamondType === 'Natural');
+  const selectedType = hasLab ? 'Lab' : hasNatural ? 'Natural' : 'Lab';
+  const selectedCarat = (product.allowedCarats && product.allowedCarats[0]) ||
+    (product.diamondOptions && product.diamondOptions[0] && product.diamondOptions[0].carat) || '1.00';
+
+  // 7. Calculate Diamond Cost
+  let diamondCost = 0;
+  if (selectedCarat && product.diamondOptions && product.diamondOptions.length > 0) {
+    const matchedOpt =
+      product.diamondOptions.find(opt => {
+        const typeMatch = selectedType === 'Lab' ? opt.diamondType === 'Lab Grown' : opt.diamondType === 'Natural';
+        const optCaratNum = parseFloat(opt.carat);
+        const selCaratNum = parseFloat(selectedCarat);
+        return !isNaN(optCaratNum) && !isNaN(selCaratNum) && optCaratNum === selCaratNum && typeMatch;
+      }) ||
+      product.diamondOptions.find(opt => {
+        const optCaratNum = parseFloat(opt.carat);
+        const selCaratNum = parseFloat(selectedCarat);
+        return !isNaN(optCaratNum) && !isNaN(selCaratNum) && optCaratNum === selCaratNum;
+      });
+    if (matchedOpt) diamondCost = matchedOpt.additionalPrice || 0;
+  }
+
+  // 8. Calculate Color flat modifier
+  let colorModifier = 0;
+  const selectedDiamondColor = (product.allowedColors && product.allowedColors[0]) || null;
+  if (selectedDiamondColor) {
+    const modifier = pricingModifiers.find(
+      m => m.attributeType === 'color' && m.value === selectedDiamondColor && m.modifierType === 'flat_add'
+    );
+    if (modifier) colorModifier = modifier.modifierValue || 0;
+  }
+
+  // 9. Calculate Clarity flat modifier
+  let clarityModifier = 0;
+  const selectedClarity = (product.allowedClarities && product.allowedClarities[0]) || null;
+  if (selectedClarity) {
+    const modifier = pricingModifiers.find(
+      m => m.attributeType === 'clarity' && m.value === selectedClarity && m.modifierType === 'flat_add'
+    );
+    if (modifier) clarityModifier = modifier.modifierValue || 0;
+  }
+
+  // 10. Calculate Size flat modifier
+  let sizeModifier = 0;
+  const selectedSize = (product.allowedSizes && product.allowedSizes[0]) || null;
+  if (selectedSize) {
+    const modifier = pricingModifiers.find(
+      m => m.attributeType === 'size' && m.value === selectedSize && m.modifierType === 'flat_add'
+    );
+    if (modifier) sizeModifier = modifier.modifierValue || 0;
+  }
+
+  // 11. Compute totals
+  const subTotal = metalCost + makingCost + diamondCost + colorModifier + clarityModifier + sizeModifier;
+  const marginAmount = subTotal * (margin / 100);
+  const finalPrice = subTotal + marginAmount;
+
+  return Math.round(finalPrice);
+};
+
 // Helper to generate SKU: first 2 letters of category + first 2 letters of subCategory + 5 random digits
 // Optimized: generates multiple candidates and batch-checks uniqueness in a single DB query
 const generateSKU = async (categoryId, subCategory, categoryNameHint = null) => {
@@ -496,22 +648,10 @@ const getAllProducts = async (req, res) => {
       }
     }
 
-    if (priceBand !== undefined && priceBand !== null && priceBand !== '') {
-      const idx = Number(priceBand);
-      const bands = [
-        { min: 0, max: 200 },
-        { min: 200, max: 500 },
-        { min: 500, max: 1000 },
-        { min: 1000, max: Infinity }
-      ];
-      const band = bands[idx];
-      if (band) {
-        filter.Price = { $gte: band.min };
-        if (band.max !== Infinity) {
-          filter.Price.$lt = band.max;
-        }
-      }
-    }
+    // BOM-based price filtering: do NOT apply priceBand on raw Price at DB level
+    // The priceBand will be applied after BOM price calculation in JS
+    const needsBOMPricing = (sort === 'price-asc' || sort === 'price-desc') ||
+      (priceBand !== undefined && priceBand !== null && priceBand !== '');
 
     if (sort === 'featured') {
       filter.isFeatured = true;
@@ -533,67 +673,178 @@ const getAllProducts = async (req, res) => {
     }
 
     let sortObj = { isNew: -1, createdAt: -1 };
-    if (sort === 'price-asc') {
-      sortObj = { Price: 1 };
-    } else if (sort === 'price-desc') {
-      sortObj = { Price: -1 };
-    } else if (sort === 'newest') {
+    if (sort === 'newest') {
       sortObj = { isNew: -1, createdAt: -1 };
+    }
+    // For price-asc/price-desc, use default DB sort; real sorting happens in JS after BOM calc
+    if (!needsBOMPricing) {
+      if (sort === 'price-asc') {
+        sortObj = { Price: 1 };
+      } else if (sort === 'price-desc') {
+        sortObj = { Price: -1 };
+      }
     }
 
     const skip = (safePage - 1) * safeLimit;
 
-    // Single aggregation with $facet: get products + total count in one DB round-trip
-    const result = await Product.aggregate([
-      { $match: filter },
-      {
-        $addFields: {
-          isNew: {
-            $or: [
-              { $eq: ["$isNew", true] },
-              { $gte: ["$createdAt", thirtyDaysAgo] }
-            ]
+    if (needsBOMPricing) {
+      // ─── BOM-Based Price Sorting & Filtering ────────────────────────────────
+      // Fetch ALL matching products (no pagination at DB level)
+      const allProducts = await Product.aggregate([
+        { $match: filter },
+        {
+          $addFields: {
+            isNew: {
+              $or: [
+                { $eq: ["$isNew", true] },
+                { $gte: ["$createdAt", thirtyDaysAgo] }
+              ]
+            }
+          }
+        },
+        { $sort: { isNew: -1, createdAt: -1 } },
+        { $project: { isDeleted: 0 } },
+        {
+          $lookup: {
+            from: "categories",
+            localField: "category",
+            foreignField: "_id",
+            as: "category",
+            pipeline: [{ $project: { name: 1 } }]
+          }
+        },
+        {
+          $addFields: {
+            category: { $arrayElemAt: ["$category", 0] }
           }
         }
-      },
-      { $sort: sortObj },
-      {
-        $facet: {
-          products: [
-            { $skip: skip },
-            { $limit: safeLimit },
-            { $project: { isDeleted: 0 } },
-            {
-              $lookup: {
-                from: "categories",
-                localField: "category",
-                foreignField: "_id",
-                as: "category",
-                pipeline: [{ $project: { name: 1 } }]
-              }
-            },
-            {
-              $addFields: {
-                category: { $arrayElemAt: ["$category", 0] }
-              }
-            }
-          ],
-          totalCount: [{ $count: "count" }]
+      ]);
+
+      // Fetch global pricing metadata for BOM calculation
+      const now = Date.now();
+      let globalMetaData;
+      if (globalMetadataCache && now < globalMetadataCacheExpiry) {
+        globalMetaData = globalMetadataCache;
+      } else {
+        globalMetaData = await Promise.all([
+          MetalRate.find({}).lean(),
+          MakingCharge.find({}).lean(),
+          GlobalConfig.findOne({ key: "margin_percentage" }).lean()
+        ]);
+        globalMetadataCache = globalMetaData;
+        globalMetadataCacheExpiry = Date.now() + METADATA_CACHE_TTL;
+      }
+
+      const [metalRates, makingCharges, marginConfig] = globalMetaData;
+
+      // Fetch all active pricing modifiers (not category-specific for listing)
+      const pricingModifiers = await PricingModifier.find({ isActive: true }).lean();
+
+      const globalMeta = {
+        metalRates,
+        makingCharges,
+        margin: marginConfig ? marginConfig.value : 0,
+        pricingModifiers
+      };
+
+      // Calculate BOM price for each product
+      let productsWithBOM = allProducts.map(p => ({
+        ...p,
+        _bomPrice: calculateDefaultBOMPrice(p, globalMeta)
+      }));
+
+      // Apply priceBand filter on BOM price
+      if (priceBand !== undefined && priceBand !== null && priceBand !== '') {
+        const idx = Number(priceBand);
+        const bands = [
+          { min: 0, max: 200 },
+          { min: 200, max: 500 },
+          { min: 500, max: 1000 },
+          { min: 1000, max: Infinity }
+        ];
+        const band = bands[idx];
+        if (band) {
+          productsWithBOM = productsWithBOM.filter(p => {
+            return p._bomPrice >= band.min && (band.max === Infinity || p._bomPrice < band.max);
+          });
         }
       }
-    ]);
 
-    const products = result[0]?.products || [];
-    const total = result[0]?.totalCount[0]?.count || 0;
+      // Apply BOM price sorting
+      if (sort === 'price-asc') {
+        productsWithBOM.sort((a, b) => a._bomPrice - b._bomPrice);
+      } else if (sort === 'price-desc') {
+        productsWithBOM.sort((a, b) => b._bomPrice - a._bomPrice);
+      }
 
-    const responsePayload = new ApiResponse(200, {
-      products,
-      pagination: { total, page: safePage, limit: safeLimit, pages: Math.ceil(total / safeLimit) }
-    }, "Products fetched successfully");
+      const total = productsWithBOM.length;
 
-    productsCache[cacheKey] = responsePayload;
+      // Apply pagination in JS
+      const paginatedProducts = productsWithBOM.slice(skip, skip + safeLimit);
 
-    res.status(200).json(responsePayload);
+      // Remove internal _bomPrice field before sending response
+      const products = paginatedProducts.map(({ _bomPrice, ...rest }) => rest);
+
+      const responsePayload = new ApiResponse(200, {
+        products,
+        pagination: { total, page: safePage, limit: safeLimit, pages: Math.ceil(total / safeLimit) }
+      }, "Products fetched successfully");
+
+      productsCache[cacheKey] = responsePayload;
+      res.status(200).json(responsePayload);
+    } else {
+      // ─── Standard DB-Level Sort & Pagination ──────────────────────────────
+      // Single aggregation with $facet: get products + total count in one DB round-trip
+      const result = await Product.aggregate([
+        { $match: filter },
+        {
+          $addFields: {
+            isNew: {
+              $or: [
+                { $eq: ["$isNew", true] },
+                { $gte: ["$createdAt", thirtyDaysAgo] }
+              ]
+            }
+          }
+        },
+        { $sort: sortObj },
+        {
+          $facet: {
+            products: [
+              { $skip: skip },
+              { $limit: safeLimit },
+              { $project: { isDeleted: 0 } },
+              {
+                $lookup: {
+                  from: "categories",
+                  localField: "category",
+                  foreignField: "_id",
+                  as: "category",
+                  pipeline: [{ $project: { name: 1 } }]
+                }
+              },
+              {
+                $addFields: {
+                  category: { $arrayElemAt: ["$category", 0] }
+                }
+              }
+            ],
+            totalCount: [{ $count: "count" }]
+          }
+        }
+      ]);
+
+      const products = result[0]?.products || [];
+      const total = result[0]?.totalCount[0]?.count || 0;
+
+      const responsePayload = new ApiResponse(200, {
+        products,
+        pagination: { total, page: safePage, limit: safeLimit, pages: Math.ceil(total / safeLimit) }
+      }, "Products fetched successfully");
+
+      productsCache[cacheKey] = responsePayload;
+      res.status(200).json(responsePayload);
+    }
   } catch (error) {
     res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));
   }
