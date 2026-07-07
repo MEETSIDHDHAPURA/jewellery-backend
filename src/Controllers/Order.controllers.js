@@ -150,7 +150,13 @@ const getUserOrders = async (req, res) => {
       .populate("user")
       .sort({ createdAt: -1 })
       .lean();
-    res.status(200).json(new ApiResponse(200, orders, "User orders fetched successfully"));
+
+    const mappedOrders = orders.map((order) => ({
+      ...order,
+      _id: order.orderId || order._id,
+    }));
+
+    res.status(200).json(new ApiResponse(200, mappedOrders, "User orders fetched successfully"));
   } catch (error) {
     res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));
   }
@@ -317,7 +323,10 @@ const getOrderById = async (req, res) => {
       }
     }
 
-    res.status(200).json(new ApiResponse(200, order, "Order fetched successfully"));
+    const responseOrder = order.toObject ? order.toObject() : order;
+    responseOrder._id = responseOrder.orderId || responseOrder._id;
+
+    res.status(200).json(new ApiResponse(200, responseOrder, "Order fetched successfully"));
   } catch (error) {
     res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));
   }

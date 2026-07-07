@@ -48,8 +48,8 @@ const createCheckoutSession = async (req, res) => {
         },
       ],
       mode: "payment",
-      success_url: `${clientUrl}/order/success?orderId=${order._id}&token=${paymentToken}`,
-      cancel_url: `${clientUrl}/order/failed?orderId=${order._id}&token=${paymentToken}`,
+      success_url: `${clientUrl}/order/success?orderId=${order.orderId}&token=${paymentToken}`,
+      cancel_url: `${clientUrl}/order/failed?orderId=${order.orderId}&token=${paymentToken}`,
       metadata: {
         orderId: order._id.toString(),
       },
