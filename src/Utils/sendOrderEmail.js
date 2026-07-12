@@ -66,13 +66,108 @@ const sendOrderConfirmationEmail = async (orderId) => {
       }
       variant = parts.join(" · ") || "Standard";
 
+      // Resolve Product variant link
+      let productUrl = "";
+      if (item.product) {
+        const productSlugOrId = item.product.slug || item.product._id;
+        const queryParams = [];
+        if (item.variantDetails) {
+          if (item.variantDetails.metal) queryParams.push(`metal=${encodeURIComponent(item.variantDetails.metal)}`);
+          if (item.variantDetails.carat) queryParams.push(`carat=${encodeURIComponent(item.variantDetails.carat)}`);
+          if (item.variantDetails.clarity) queryParams.push(`clarity=${encodeURIComponent(item.variantDetails.clarity)}`);
+          if (item.variantDetails.color) queryParams.push(`color=${encodeURIComponent(item.variantDetails.color)}`);
+          if (item.variantDetails.size) queryParams.push(`size=${encodeURIComponent(item.variantDetails.size)}`);
+          if (item.variantDetails.diamondType) {
+            const displayType = item.variantDetails.diamondType.includes('Lab') ? 'Lab' : 'Natural';
+            queryParams.push(`type=${encodeURIComponent(displayType)}`);
+          }
+        }
+        const queryString = queryParams.length > 0 ? `?${queryParams.join("&")}` : "";
+        productUrl = `${process.env.CLIENT_URL || "http://localhost:3000"}/products/${productSlugOrId}${queryString}`;
+      } else if (item.diamond) {
+        productUrl = `${process.env.CLIENT_URL || "http://localhost:3000"}/diamonds/${item.diamond.slug || item.diamond._id}`;
+      }
+
+      // Resolve Product/Variant Image
+      let rawImg = "";
+      if (item.product) {
+        const metal = item.variantDetails ? item.variantDetails.metal : "";
+        if (item.product.metalImages) {
+          let key = "yellowGold";
+          if (metal) {
+            const lower = metal.toLowerCase();
+            if (lower.includes("white")) key = "whiteGold";
+            else if (lower.includes("rose")) key = "roseGold";
+            else if (lower.includes("silver")) key = "silver";
+            else if (lower.includes("platinum")) key = "platinum";
+          }
+          const imagesForMetal = item.product.metalImages[key] || [];
+          if (imagesForMetal.length > 0) {
+            rawImg = imagesForMetal[0];
+          } else {
+            const allImages = [
+              ...(item.product.metalImages.yellowGold || []),
+              ...(item.product.metalImages.whiteGold || []),
+              ...(item.product.metalImages.roseGold || []),
+              ...(item.product.metalImages.silver || []),
+              ...(item.product.metalImages.platinum || [])
+            ];
+            if (allImages.length > 0) rawImg = allImages[0];
+          }
+        }
+        if (!rawImg) {
+          if (item.product.images && item.product.images.length > 0) {
+            const imgObj = item.product.images[0];
+            rawImg = typeof imgObj === "string" ? imgObj : (imgObj.src || "");
+          } else if (item.product.productImages && item.product.productImages.length > 0) {
+            rawImg = item.product.productImages[0];
+          }
+        }
+      } else if (item.diamond) {
+        if (item.diamond.image && item.diamond.image.length > 0) {
+          rawImg = item.diamond.image[0];
+        }
+      }
+
+      // Resolve image absolute URL
+      let imgSrc = "";
+      if (rawImg) {
+        if (rawImg.startsWith("http://") || rawImg.startsWith("https://")) {
+          imgSrc = rawImg;
+        } else {
+          const backendUrl = process.env.BACKEND_URL || "http://localhost:5000";
+          const cleanPath = rawImg.startsWith("/") ? rawImg : `/${rawImg}`;
+          imgSrc = `${backendUrl}${cleanPath}`;
+        }
+      }
+
+      let imageColHtml = "";
+      if (imgSrc) {
+        imageColHtml = `
+          <td style="vertical-align: top; width: 60px; padding-right: 12px;">
+            <img src="${imgSrc}" alt="${title}" width="60" style="width: 60px; height: 60px; object-fit: cover; border-radius: 8px; display: block; border: 1px solid #edf2f7;" />
+          </td>
+        `;
+      }
+
+      const titleLinkHtml = productUrl 
+        ? `<a href="${productUrl}" style="color: #0a1c3e; text-decoration: none; font-weight: 600;">${title}</a>`
+        : title;
+
       const itemTotalPrice = (item.price || 0) * (item.quantity || 1);
 
       itemsListHtml += `
         <tr style="border-bottom: 1px solid #e2e8f0;">
           <td style="padding: 16px 0; text-align: left; vertical-align: top;">
-            <div style="font-weight: 600; color: #0a1c3e; font-size: 15px;">${title}</div>
-            <div style="font-size: 12px; color: #718096; margin-top: 4px; font-weight: 500;">${variant}</div>
+            <table border="0" cellpadding="0" cellspacing="0" style="width: 100%; border-collapse: collapse;">
+              <tr>
+                ${imageColHtml}
+                <td style="vertical-align: top; text-align: left;">
+                  <div style="font-weight: 600; color: #0a1c3e; font-size: 15px;">${titleLinkHtml}</div>
+                  <div style="font-size: 12px; color: #718096; margin-top: 4px; font-weight: 500;">${variant}</div>
+                </td>
+              </tr>
+            </table>
           </td>
           <td style="padding: 16px 0; text-align: center; vertical-align: top; color: #4a5568; font-weight: 500; font-size: 14px;">
             ${item.quantity}
