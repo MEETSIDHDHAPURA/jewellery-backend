@@ -17,6 +17,7 @@ const syncMetalRates = async () => {
     // 1. Fetch Gold Rates (XAU) in USD
     const goldRes = await axios.get("https://www.goldapi.io/api/XAU/USD", { headers });
     const gold = goldRes.data;
+    console.log(gold)
 
     // 2. Fetch Silver Rates (XAG) in USD
     const silverRes = await axios.get("https://www.goldapi.io/api/XAG/USD", { headers });
