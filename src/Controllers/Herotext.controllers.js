@@ -65,7 +65,7 @@ const updateHeroText = async (req, res) => {
     const heroText = await HeroText.findByIdAndUpdate(
       id,
       { herotext },
-      { new: true, runValidators: true }
+      { returnDocument: "after", runValidators: true }
     );
 
     logActivity(req, "Update", `Update hero text from "${oldText}" to "${heroText.herotext}"`).catch(() => {});

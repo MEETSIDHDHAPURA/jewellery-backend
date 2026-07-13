@@ -169,7 +169,7 @@ const updateQuotation = async (req, res) => {
         ]
       },
       { $set: req.body },
-      { new: true, runValidators: true }
+      { returnDocument: "after", runValidators: true }
     ).lean();
 
     if (!quotation) {
