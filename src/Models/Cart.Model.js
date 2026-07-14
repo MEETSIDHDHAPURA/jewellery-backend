@@ -82,11 +82,10 @@ const cartSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-cartSchema.pre("save", function (next) {
+cartSchema.pre("save", function () {
   if (this.isModified("items")) {
     this.abandonedEmailSent = false;
   }
-  next();
 });
 
 module.exports = mongoose.model("Cart", cartSchema);
