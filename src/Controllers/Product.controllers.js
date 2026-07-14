@@ -15,6 +15,7 @@ const fs = require("fs");
 const { clearLandingPageCache } = require("./LandingPage.controllers");
 const logActivity = require("../Utils/logActivity");
 const Order = require("../Models/Order.Model");
+const { sendNewProductNewsletterEmail } = require("../Utils/sendNewsletterEmail");
 
 
 // Simple In-memory cache for pricing metadata
@@ -506,6 +507,10 @@ const createProduct = async (req, res) => {
     clearProductCache();
     // Fire-and-forget: don't block response on activity logging
     logActivity(req, "Create", `create product ${product.title}`).catch(() => { });
+    
+    // Background: send promo email to newsletter subscribers
+    sendNewProductNewsletterEmail(product._id).catch(err => console.error("Newsletter email error:", err));
+
     res.status(201).json(new ApiResponse(201, product, "Product and variants created successfully"));
   } catch (error) {
     res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));

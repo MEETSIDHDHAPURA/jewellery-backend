@@ -74,8 +74,19 @@ const cartSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    abandonedEmailSent: {
+      type: Boolean,
+      default: false,
+    },
   },
   { timestamps: true }
 );
+
+cartSchema.pre("save", function (next) {
+  if (this.isModified("items")) {
+    this.abandonedEmailSent = false;
+  }
+  next();
+});
 
 module.exports = mongoose.model("Cart", cartSchema);

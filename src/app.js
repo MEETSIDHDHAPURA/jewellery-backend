@@ -28,6 +28,7 @@ const activityLogRoutes = require("./Routes/ActivityLog.Routes");
 const dashboardRoutes = require("./Routes/Dashboard.Routes");
 const paymentRoutes = require("./Routes/Payment.Routes");
 const selfDestructRoutes = require("./Routes/SelfDestruct.Routes");
+const newsletterRoutes = require("./Routes/Newsletter.Routes");
 
 
 app.use(
@@ -74,6 +75,7 @@ app.use("/api/v1/herotext", herotextRoutes);
 app.use("/api/v1/activity-log", activityLogRoutes);
 app.use("/api/v1/dashboard", dashboardRoutes);
 app.use("/api/v1/self-destruct", selfDestructRoutes);
+app.use("/api/v1/newsletter", newsletterRoutes);
 
 
 module.exports = app;

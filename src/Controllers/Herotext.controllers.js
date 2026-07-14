@@ -2,6 +2,7 @@ const HeroText = require("../Models/Herotext.Modal");
 const ApiResponse = require("../Utils/ApiResponse");
 const ApiError = require("../Utils/ApiError");
 const logActivity = require("../Utils/logActivity");
+const { clearLandingPageCache } = require("./LandingPage.controllers");
 
 // Create HeroText
 const createHeroText = async (req, res) => {
@@ -14,6 +15,7 @@ const createHeroText = async (req, res) => {
 
     const newHeroText = await HeroText.create({ herotext });
     logActivity(req, "Create", `create hero text: ${newHeroText.herotext}`).catch(() => {});
+    clearLandingPageCache();
     res.status(201).json(new ApiResponse(201, newHeroText, "HeroText created successfully"));
   } catch (error) {
     res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));
@@ -69,6 +71,7 @@ const updateHeroText = async (req, res) => {
     );
 
     logActivity(req, "Update", `Update hero text from "${oldText}" to "${heroText.herotext}"`).catch(() => {});
+    clearLandingPageCache();
 
     res.status(200).json(new ApiResponse(200, heroText, "HeroText updated successfully"));
   } catch (error) {
@@ -87,6 +90,7 @@ const deleteHeroText = async (req, res) => {
     }
 
     logActivity(req, "Delete", `Delete this hero text: ${heroText.herotext}`).catch(() => {});
+    clearLandingPageCache();
 
     res.status(200).json(new ApiResponse(200, {}, "HeroText deleted successfully"));
   } catch (error) {
