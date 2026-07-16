@@ -254,8 +254,8 @@ const seedDefaults = async (req, res) => {
           dynamicDefaults.push({
             category: catId,
             attributeType: "size",
-            value: `${size} (in)`,
-            label: `${size} (in)`,
+            value: `${size} in`,
+            label: `${size} in`,
             modifierType: "flat_add",
             modifierValue: 0,
             sortOrder: size - 4
