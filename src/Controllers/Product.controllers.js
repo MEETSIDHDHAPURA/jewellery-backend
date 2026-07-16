@@ -322,11 +322,9 @@ const populatePricingAndDiamonds = async (productData, body, productId = null) =
 
   let diamondPromise = Promise.resolve([]);
   if (diamondType && diamondShape && allowedCarats.length > 0) {
-    const caratNumbers = allowedCarats.map(c => Number(c) || parseFloat(c));
     diamondPromise = DiamondPrice.find({
       diamondType: { $regex: new RegExp(`^${escapeRegex(diamondType)}$`, "i") },
       shape: { $regex: new RegExp(`^${escapeRegex(diamondShape)}$`, "i") },
-      carat: { $in: caratNumbers },
       clarity: { $in: allowedClarities },
       color: { $in: allowedColors }
     }).lean().catch(err => {
@@ -361,16 +359,45 @@ const populatePricingAndDiamonds = async (productData, body, productId = null) =
     }
   }
 
-  // 2. Apply diamond options data
-  if (matchingDiamonds && matchingDiamonds.length > 0) {
-    productData.diamondOptions = matchingDiamonds.map(d => ({
-      diamondType: d.diamondType,
-      carat: d.carat.toString(),
-      clarity: d.clarity,
-      color: d.color,
-      additionalPrice: d.price || 0,
-      isActive: true
-    }));
+  // 2. Apply diamond options data (store calculated finalPrice as additionalPrice)
+  if (matchingDiamonds && matchingDiamonds.length > 0 && allowedCarats.length > 0) {
+    const generatedOptions = [];
+    for (const carat of allowedCarats) {
+      for (const color of allowedColors) {
+        for (const clarity of allowedClarities) {
+          // Look up matching diamond in matchingDiamonds
+          // First try to find exact carat match
+          let matched = matchingDiamonds.find(d => 
+            d.color.toLowerCase() === color.toLowerCase() &&
+            d.clarity.toLowerCase() === clarity.toLowerCase() &&
+            Number(d.carat) === Number(carat)
+          );
+          
+          // Fallback to any carat for the same color and clarity
+          if (!matched) {
+            matched = matchingDiamonds.find(d => 
+              d.color.toLowerCase() === color.toLowerCase() &&
+              d.clarity.toLowerCase() === clarity.toLowerCase()
+            );
+          }
+
+          if (matched) {
+            const caratValue = parseFloat(carat) || 0;
+            const pricePerCarat = Number(matched.price) || 0;
+            const additionalPrice = pricePerCarat * caratValue;
+            generatedOptions.push({
+              diamondType: matched.diamondType,
+              carat: carat.toString(),
+              clarity: clarity,
+              color: color,
+              additionalPrice: Number(additionalPrice.toFixed(2)),
+              isActive: true
+            });
+          }
+        }
+      }
+    }
+    productData.diamondOptions = generatedOptions;
   }
 };
 
@@ -692,6 +719,33 @@ const getAllProducts = async (req, res) => {
 
     const skip = (safePage - 1) * safeLimit;
 
+    // Fetch global pricing metadata for BOM calculation
+    const now = Date.now();
+    let globalMetaData;
+    if (globalMetadataCache && now < globalMetadataCacheExpiry) {
+      globalMetaData = globalMetadataCache;
+    } else {
+      globalMetaData = await Promise.all([
+        MetalRate.find({}).lean(),
+        MakingCharge.find({}).lean(),
+        GlobalConfig.findOne({ key: "margin_percentage" }).lean()
+      ]);
+      globalMetadataCache = globalMetaData;
+      globalMetadataCacheExpiry = Date.now() + METADATA_CACHE_TTL;
+    }
+
+    const [metalRates, makingCharges, marginConfig] = globalMetaData;
+
+    // Fetch all active pricing modifiers (not category-specific for listing)
+    const pricingModifiers = await PricingModifier.find({ isActive: true }).lean();
+
+    const globalMeta = {
+      metalRates,
+      makingCharges,
+      margin: marginConfig ? marginConfig.value : 0,
+      pricingModifiers
+    };
+
     if (needsBOMPricing) {
       // ─── BOM-Based Price Sorting & Filtering ────────────────────────────────
       // Fetch ALL matching products (no pagination at DB level)
@@ -725,38 +779,15 @@ const getAllProducts = async (req, res) => {
         }
       ]);
 
-      // Fetch global pricing metadata for BOM calculation
-      const now = Date.now();
-      let globalMetaData;
-      if (globalMetadataCache && now < globalMetadataCacheExpiry) {
-        globalMetaData = globalMetadataCache;
-      } else {
-        globalMetaData = await Promise.all([
-          MetalRate.find({}).lean(),
-          MakingCharge.find({}).lean(),
-          GlobalConfig.findOne({ key: "margin_percentage" }).lean()
-        ]);
-        globalMetadataCache = globalMetaData;
-        globalMetadataCacheExpiry = Date.now() + METADATA_CACHE_TTL;
-      }
-
-      const [metalRates, makingCharges, marginConfig] = globalMetaData;
-
-      // Fetch all active pricing modifiers (not category-specific for listing)
-      const pricingModifiers = await PricingModifier.find({ isActive: true }).lean();
-
-      const globalMeta = {
-        metalRates,
-        makingCharges,
-        margin: marginConfig ? marginConfig.value : 0,
-        pricingModifiers
-      };
-
       // Calculate BOM price for each product
-      let productsWithBOM = allProducts.map(p => ({
-        ...p,
-        _bomPrice: calculateDefaultBOMPrice(p, globalMeta)
-      }));
+      let productsWithBOM = allProducts.map(p => {
+        const calculatedPrice = calculateDefaultBOMPrice(p, globalMeta);
+        return {
+          ...p,
+          Price: calculatedPrice,
+          _bomPrice: calculatedPrice
+        };
+      });
 
       // Apply priceBand filter on BOM price
       if (priceBand !== undefined && priceBand !== null && priceBand !== '') {
@@ -839,7 +870,14 @@ const getAllProducts = async (req, res) => {
         }
       ]);
 
-      const products = result[0]?.products || [];
+      const rawProducts = result[0]?.products || [];
+      const products = rawProducts.map(p => {
+        const calculatedPrice = calculateDefaultBOMPrice(p, globalMeta);
+        return {
+          ...p,
+          Price: calculatedPrice
+        };
+      });
       const total = result[0]?.totalCount[0]?.count || 0;
 
       const responsePayload = new ApiResponse(200, {
@@ -951,6 +989,15 @@ const getProductById = async (req, res) => {
       globalMetaPromise,
       modifiersPromise
     ]);
+
+    const globalMeta = {
+      metalRates,
+      makingCharges,
+      margin: marginConfig ? marginConfig.value : 0,
+      pricingModifiers
+    };
+
+    mappedProduct.Price = calculateDefaultBOMPrice(mappedProduct, globalMeta);
 
     res.status(200).json(new ApiResponse(200, {
       product: mappedProduct,
