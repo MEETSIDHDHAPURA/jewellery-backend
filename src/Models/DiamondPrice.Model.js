@@ -39,6 +39,11 @@ const diamondPriceSchema = new mongoose.Schema(
       required: true,
       default: 0,
     },
+    finalPrice: {
+      type: Number,
+      required: true,
+      default: 0,
+    },
     stock: {
       type: Number,
       required: true,
@@ -66,7 +71,6 @@ const diamondPriceSchema = new mongoose.Schema(
     },
     cetNumber: {
       type: String,
-      required: [true, "CET Number is required"],
       trim: true,
     },
   },

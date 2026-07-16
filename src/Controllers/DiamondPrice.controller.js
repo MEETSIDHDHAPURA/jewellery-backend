@@ -12,10 +12,10 @@ const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 // Create Diamond Price
 const createDiamondPrice = async (req, res) => {
   try {
-    const { diamondType, shape, carat, clarity, color, price, stock, isSoldOut, cetNumber } = req.body;
+    const { diamondType, shape, carat, clarity, color, price, finalPrice, stock, isSoldOut, cetNumber } = req.body;
 
-    if (!shape || !carat || !clarity || !color || !cetNumber) {
-      throw new ApiError(400, "shape, carat, clarity, color, and CET number are required");
+    if (!shape || !carat || !clarity || !color) {
+      throw new ApiError(400, "shape, carat, clarity, and color are required");
     }
 
     let imageUrls = [];
@@ -70,6 +70,7 @@ const createDiamondPrice = async (req, res) => {
       clarity,
       color,
       price: price || 0,
+      finalPrice: finalPrice !== undefined ? Number(finalPrice) : Number((price * carat).toFixed(2)) || 0,
       stock: stock || 0,
       isSoldOut: isSoldOut !== undefined ? isSoldOut : false,
       image: imageUrls,
@@ -117,6 +118,7 @@ const bulkCreateDiamondPrices = async (req, res) => {
             clarity: d.clarity,
             color: d.color,
             price: d.price || 0,
+            finalPrice: d.finalPrice !== undefined ? Number(d.finalPrice) : Number((d.price * d.carat).toFixed(2)) || 0,
             stock: d.stock || 0,
             cetNumber: d.cetNumber,
             isActive: d.isActive !== undefined ? d.isActive : true,
@@ -341,6 +343,15 @@ const updateDiamondPrice = async (req, res) => {
 
     const updateData = { ...req.body };
 
+    const oldPrice = existing.price || 0;
+    const oldCarat = existing.carat || 0;
+    const newPrice = updateData.price !== undefined ? Number(updateData.price) : Number(oldPrice);
+    const newCarat = updateData.carat !== undefined ? Number(updateData.carat) : Number(oldCarat);
+
+    if (updateData.finalPrice === undefined && (updateData.price !== undefined || updateData.carat !== undefined)) {
+      updateData.finalPrice = Number((newPrice * newCarat).toFixed(2));
+    }
+
     let existingImages = [];
     if (req.body.existingImages) {
       try {
@@ -412,7 +423,6 @@ const updateDiamondPrice = async (req, res) => {
       runValidators: true,
     });
 
-    const oldPrice = existing.price;
     const name = `${existing.diamondType || "Lab Grown"} ${existing.shape} ${existing.carat} Carat ${existing.clarity} ${existing.color}`;
     const priceChanged = updateData.price !== undefined && Number(updateData.price) !== Number(oldPrice);
     
