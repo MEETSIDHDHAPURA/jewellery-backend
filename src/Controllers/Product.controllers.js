@@ -163,22 +163,23 @@ const calculateDefaultBOMPrice = (product, globalMeta) => {
   const selectedCarat = (product.allowedCarats && product.allowedCarats[0]) ||
     (product.diamondOptions && product.diamondOptions[0] && product.diamondOptions[0].carat) || '1.00';
 
-  // 7. Calculate Diamond Cost
+  // 7. Calculate Diamond Cost — prefer 1ct option for per-carat rate
   let diamondCost = 0;
   if (selectedCarat && product.diamondOptions && product.diamondOptions.length > 0) {
-    const matchedOpt =
-      product.diamondOptions.find(opt => {
-        const typeMatch = selectedType === 'Lab' ? opt.diamondType === 'Lab Grown' : opt.diamondType === 'Natural';
-        const optCaratNum = parseFloat(opt.carat);
-        const selCaratNum = parseFloat(selectedCarat);
-        return !isNaN(optCaratNum) && !isNaN(selCaratNum) && optCaratNum === selCaratNum && typeMatch;
-      }) ||
-      product.diamondOptions.find(opt => {
-        const optCaratNum = parseFloat(opt.carat);
-        const selCaratNum = parseFloat(selectedCarat);
-        return !isNaN(optCaratNum) && !isNaN(selCaratNum) && optCaratNum === selCaratNum;
-      });
-    if (matchedOpt) diamondCost = matchedOpt.additionalPrice || 0;
+    const fullType = selectedType === 'Lab' ? 'Lab Grown' : 'Natural';
+    // Prefer 1 carat option of matching type to get per-carat rate
+    const oneCtOpt = product.diamondOptions.find(opt =>
+      opt.diamondType === fullType && parseFloat(opt.carat) === 1
+    ) || product.diamondOptions.find(opt =>
+      parseFloat(opt.carat) === 1
+    ) || product.diamondOptions.find(opt =>
+      opt.diamondType === fullType
+    ) || product.diamondOptions[0];
+
+    if (oneCtOpt) {
+      const perCaratRate = (oneCtOpt.additionalPrice || 0) / (parseFloat(oneCtOpt.carat) || 1);
+      diamondCost = perCaratRate * (parseFloat(selectedCarat) || 0);
+    }
   }
 
   // 8. Calculate Color flat modifier
@@ -360,17 +361,17 @@ const populatePricingAndDiamonds = async (productData, body, productId = null) =
   }
 
   // 2. Apply diamond options data (store calculated finalPrice as additionalPrice)
+  // Always prefer the 1 carat diamond's per-carat rate for consistency across all carat options
   if (matchingDiamonds && matchingDiamonds.length > 0 && allowedCarats.length > 0) {
     const generatedOptions = [];
     for (const carat of allowedCarats) {
       for (const color of allowedColors) {
         for (const clarity of allowedClarities) {
-          // Look up matching diamond in matchingDiamonds
-          // First try to find exact carat match
+          // Prefer the 1 carat diamond for this color+clarity to get per-carat rate
           let matched = matchingDiamonds.find(d => 
             d.color.toLowerCase() === color.toLowerCase() &&
             d.clarity.toLowerCase() === clarity.toLowerCase() &&
-            Number(d.carat) === Number(carat)
+            Number(d.carat) === 1
           );
           
           // Fallback to any carat for the same color and clarity
@@ -383,6 +384,7 @@ const populatePricingAndDiamonds = async (productData, body, productId = null) =
 
           if (matched) {
             const caratValue = parseFloat(carat) || 0;
+            // Derive per-carat rate from the matched diamond (price is always per-carat)
             const pricePerCarat = Number(matched.price) || 0;
             const additionalPrice = pricePerCarat * caratValue;
             generatedOptions.push({
