@@ -212,12 +212,19 @@ const calculateDefaultBOMPrice = (product, globalMeta) => {
     if (modifier) sizeModifier = modifier.modifierValue || 0;
   }
 
-  // 11. Compute totals
-  const subTotal = metalCost + makingCost + diamondCost + colorModifier + clarityModifier + sizeModifier;
-  const marginAmount = subTotal * (margin / 100);
+  // 11. Compute totals using exact 2 decimal rounded component values
+  const metalCostRounded = Number(metalCost.toFixed(2));
+  const makingCostRounded = Number(makingCost.toFixed(2));
+  const diamondCostRounded = Number(diamondCost.toFixed(2));
+  const colorModifierRounded = Number(colorModifier.toFixed(2));
+  const clarityModifierRounded = Number(clarityModifier.toFixed(2));
+  const sizeModifierRounded = Number(sizeModifier.toFixed(2));
+
+  const subTotal = metalCostRounded + makingCostRounded + diamondCostRounded + colorModifierRounded + clarityModifierRounded + sizeModifierRounded;
+  const marginAmount = Number((subTotal * (margin / 100)).toFixed(2));
   const finalPrice = subTotal + marginAmount;
 
-  return Math.round(finalPrice);
+  return Number(finalPrice.toFixed(2));
 };
 
 // Helper to generate SKU: first 2 letters of category + first 2 letters of subCategory + 5 random digits
