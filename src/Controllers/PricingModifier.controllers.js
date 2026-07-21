@@ -200,6 +200,7 @@ const seedDefaults = async (req, res) => {
       const catName = (cat.name || "").toLowerCase();
       const isRing = catName.includes("ring");
       const isBracelet = catName.includes("bracelet");
+      const isMenBand = catName.includes("men band") || catName.includes("mens band") || catName.includes("Men's Bands") || catName.includes("MensBands") || catName.includes("Men'sBands");
 
       // Delete existing modifiers for this category to avoid mixed values (like old sizes)
       await PricingModifier.deleteMany({ category: catId });
@@ -247,9 +248,13 @@ const seedDefaults = async (req, res) => {
           { category: catId, attributeType: "size", value: "8.5", label: "Size 8.5", modifierType: "flat_add", modifierValue: 200, sortOrder: 10 },
           { category: catId, attributeType: "size", value: "9", label: "Size 9", modifierType: "flat_add", modifierValue: 300, sortOrder: 11 },
           { category: catId, attributeType: "size", value: "9.5", label: "Size 9.5", modifierType: "flat_add", modifierValue: 500, sortOrder: 12 },
-          { category: catId, attributeType: "size", value: "10", label: "Size 10", modifierType: "flat_add", modifierValue: 500, sortOrder: 13 }
+          { category: catId, attributeType: "size", value: "10", label: "Size 10", modifierType: "flat_add", modifierValue: 500, sortOrder: 13 },
+          { category: catId, attributeType: "size", value: "10.5", label: "Size 10.5", modifierType: "flat_add", modifierValue: 600, sortOrder: 14 },
+          { category: catId, attributeType: "size", value: "11", label: "Size 11", modifierType: "flat_add", modifierValue: 600, sortOrder: 15 },
+          { category: catId, attributeType: "size", value: "11.5", label: "Size 11.5", modifierType: "flat_add", modifierValue: 700, sortOrder: 16 },
+          { category: catId, attributeType: "size", value: "12", label: "Size 12", modifierType: "flat_add", modifierValue: 700, sortOrder: 17 }
         );
-      } else if (isBracelet) {
+      } else if (isBracelet || isMenBand) {
         for (let size = 5; size <= 14; size++) {
           dynamicDefaults.push({
             category: catId,
@@ -267,7 +272,8 @@ const seedDefaults = async (req, res) => {
           { category: catId, attributeType: "size", value: "small (s)", label: "small (s)", modifierType: "flat_add", modifierValue: 0, sortOrder: 2 },
           { category: catId, attributeType: "size", value: "medium (m)", label: "medium (m)", modifierType: "flat_add", modifierValue: 0, sortOrder: 3 },
           { category: catId, attributeType: "size", value: "large (l)", label: "large (l)", modifierType: "flat_add", modifierValue: 0, sortOrder: 4 },
-          { category: catId, attributeType: "size", value: "Extra large (xl)", label: "Extra large (xl)", modifierType: "flat_add", modifierValue: 0, sortOrder: 5 }
+          { category: catId, attributeType: "size", value: "Extra large (xl)", label: "Extra large (xl)", modifierType: "flat_add", modifierValue: 0, sortOrder: 5 },
+          { category: catId, attributeType: "size", value: "Extra large (xxl)", label: "Extra large (xxl)", modifierType: "flat_add", modifierValue: 0, sortOrder: 6 },
         );
       }
 
