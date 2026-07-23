@@ -119,8 +119,8 @@ const bulkCreateDiamondPrices = async (req, res) => {
             color: d.color,
             price: d.price || 0,
             finalPrice: d.finalPrice !== undefined ? Number(d.finalPrice) : Number((d.price * d.carat).toFixed(2)) || 0,
-            stock: d.stock || 0,
-            cetNumber: d.cetNumber,
+            stock: d.stock !== undefined && d.stock !== null ? d.stock : 0,
+            cetNumber: d.cetNumber || '',
             isActive: d.isActive !== undefined ? d.isActive : true,
             isSoldOut: d.isSoldOut !== undefined ? d.isSoldOut : false,
           }

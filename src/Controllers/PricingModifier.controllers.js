@@ -268,12 +268,12 @@ const seedDefaults = async (req, res) => {
         }
       } else {
         dynamicDefaults.push(
-          { category: catId, attributeType: "size", value: "Extra small (xs)", label: "Extra small (xs)", modifierType: "flat_add", modifierValue: 0, sortOrder: 1 },
-          { category: catId, attributeType: "size", value: "small (s)", label: "small (s)", modifierType: "flat_add", modifierValue: 0, sortOrder: 2 },
-          { category: catId, attributeType: "size", value: "medium (m)", label: "medium (m)", modifierType: "flat_add", modifierValue: 0, sortOrder: 3 },
-          { category: catId, attributeType: "size", value: "large (l)", label: "large (l)", modifierType: "flat_add", modifierValue: 0, sortOrder: 4 },
-          { category: catId, attributeType: "size", value: "Extra large (xl)", label: "Extra large (xl)", modifierType: "flat_add", modifierValue: 0, sortOrder: 5 },
-          { category: catId, attributeType: "size", value: "Extra large (xxl)", label: "Extra large (xxl)", modifierType: "flat_add", modifierValue: 0, sortOrder: 6 },
+          { category: catId, attributeType: "size", value: "XS", label: "XS", modifierType: "flat_add", modifierValue: 0, sortOrder: 1 },
+          { category: catId, attributeType: "size", value: "S", label: "S", modifierType: "flat_add", modifierValue: 0, sortOrder: 2 },
+          { category: catId, attributeType: "size", value: "M", label: "M", modifierType: "flat_add", modifierValue: 0, sortOrder: 3 },
+          { category: catId, attributeType: "size", value: "L", label: "L", modifierType: "flat_add", modifierValue: 0, sortOrder: 4 },
+          { category: catId, attributeType: "size", value: "XL", label: "XL", modifierType: "flat_add", modifierValue: 0, sortOrder: 5 },
+          { category: catId, attributeType: "size", value: "XXL", label: "XXL", modifierType: "flat_add", modifierValue: 0, sortOrder: 6 },
         );
       }
 
