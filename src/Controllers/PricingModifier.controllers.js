@@ -198,9 +198,10 @@ const seedDefaults = async (req, res) => {
     for (const cat of targetCategories) {
       const catId = cat._id.toString();
       const catName = (cat.name || "").toLowerCase();
+      const normalizedCatName = catName.replace(/[^a-z0-9]/g, "");
       const isRing = catName.includes("ring");
       const isBracelet = catName.includes("bracelet");
-      const isMenBand = catName.includes("men band") || catName.includes("mens band") || catName.includes("Men's Bands") || catName.includes("MensBands") || catName.includes("Men'sBands");
+      const isMenBand = normalizedCatName.includes("menband") || normalizedCatName.includes("mensband") || catName.includes("men band") || catName.includes("mens band");
 
       // Delete existing modifiers for this category to avoid mixed values (like old sizes)
       await PricingModifier.deleteMany({ category: catId });
