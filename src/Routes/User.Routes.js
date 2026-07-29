@@ -14,5 +14,7 @@ router.get("/profile/:id", requireAuth, userController.getUserProfile);
 router.patch("/update-profile/:id", requireAuth, upload.single("avatar"), userController.updateUserProfile);
 router.patch("/update-password/:id", requireAuth, userController.updatePassword);
 router.get("/all", adminOnly, userController.getAllUsers);
+router.patch("/:id/permissions", adminOnly, userController.updateUserPermissions);
+router.post("/create-admin", adminOnly, userController.createAdminUser);
 
 module.exports = router;

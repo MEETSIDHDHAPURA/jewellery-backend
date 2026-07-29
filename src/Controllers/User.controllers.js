@@ -389,6 +389,87 @@ const resendOTP = async (req, res) => {
   }
 };
 
+// Update User Permissions (Admin Access Management)
+const updateUserPermissions = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { permissions } = req.body;
+
+    if (!Array.isArray(permissions)) {
+      throw new ApiError(400, "permissions array is required");
+    }
+
+    const user = await User.findById(id);
+    if (!user) throw new ApiError(404, "User not found");
+
+    // Process & enforce dependency rule: if view is false, edit and delete MUST be false
+    const sanitizedPermissions = permissions.map(p => ({
+      module: p.module,
+      view: Boolean(p.view),
+      edit: Boolean(p.view && p.edit),
+      delete: Boolean(p.view && p.delete)
+    }));
+
+    user.permissions = sanitizedPermissions;
+    await user.save();
+
+    const updatedUser = await User.findById(id).select("-password").lean();
+    res.status(200).json(new ApiResponse(200, updatedUser, "User permissions updated successfully"));
+  } catch (error) {
+    res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));
+  }
+};
+
+// Create Admin User (Direct Creation by Super Admin)
+const createAdminUser = async (req, res) => {
+  try {
+    const { name, email, password, phone, countryCode } = req.body;
+
+    if (!name || !email || !password || !phone) {
+      throw new ApiError(400, "Name, Email, Password, and Phone Number are required");
+    }
+
+    const existingUser = await User.findOne({ email: email.toLowerCase() });
+    if (existingUser) {
+      throw new ApiError(409, "User with this email already exists");
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    const ALL_MODULE_KEYS = [
+      'dashboard', 'products', 'categories', 'diamonds', 'metal_rates',
+      'making_charges', 'pricing_modifiers', 'tax_configuration', 'orders',
+      'quotation', 'coupons', 'reviews', 'users', 'user_access', 'custom_design',
+      'support', 'hero_section', 'landing_page', 'quick_text', 'policies',
+      'currency_rates', 'activity_logs'
+    ];
+
+    const defaultPermissions = ALL_MODULE_KEYS.map(m => ({
+      module: m,
+      view: false,
+      edit: false,
+      delete: false
+    }));
+
+    const adminUser = await User.create({
+      name,
+      email: email.toLowerCase(),
+      password: hashedPassword,
+      phone: phone || "",
+      countryCode: countryCode || "+1",
+      role: "admin",
+      isVerified: true,
+      isActive: true,
+      permissions: defaultPermissions
+    });
+
+    const createdAdmin = await User.findById(adminUser._id).select("-password").lean();
+    res.status(201).json(new ApiResponse(201, createdAdmin, "Admin account created successfully"));
+  } catch (error) {
+    res.status(error.statusCode || 500).json(new ApiError(error.statusCode || 500, error.message));
+  }
+};
+
 module.exports = {
   registerUser,
   loginUser,
@@ -400,4 +481,8 @@ module.exports = {
   getAllUsers,
   verifyOTP,
   resendOTP,
+  updateUserPermissions,
+  createAdminUser,
 };
+
+

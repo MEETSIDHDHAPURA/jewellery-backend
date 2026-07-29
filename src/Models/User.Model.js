@@ -29,6 +29,18 @@ const userSchema = new mongoose.Schema(
       enum: ["user", "admin"],
       default: "user",
     },
+    isSuperAdmin: {
+      type: Boolean,
+      default: false,
+    },
+    permissions: [
+      {
+        module: { type: String, required: true },
+        view: { type: Boolean, default: false },
+        edit: { type: Boolean, default: false },
+        delete: { type: Boolean, default: false },
+      },
+    ],
     avatar: {
       type: String,
       default: "",
