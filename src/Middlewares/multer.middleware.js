@@ -18,6 +18,7 @@ const storage = multer.diskStorage({
 
 const multerInstance = multer({
   storage: storage,
+  limits: { fileSize: 60 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
     const fileTypes = /jpeg|jpg|png|webp|pdf|mp4|webm|mov|avi|mkv/;
     const extname = fileTypes.test(path.extname(file.originalname).toLowerCase());
@@ -50,7 +51,7 @@ const checkFileSizes = (req, res, next) => {
 
   for (const file of filesToCheck) {
     const isVideo = file.mimetype.startsWith("video/") || /\.(mp4|webm|mov|avi|mkv)$/i.test(file.originalname);
-    const limit = isVideo ? 10 * 1024 * 1024 : 5 * 1024 * 1024;
+    const limit = isVideo ? 60 * 1024 * 1024 : 20 * 1024 * 1024;
 
     if (file.size > limit) {
       // Clean up all uploaded files from disk
@@ -64,7 +65,7 @@ const checkFileSizes = (req, res, next) => {
         }
       }
       return res.status(400).json({
-        message: `${isVideo ? 'Video' : 'Image/File'} size exceeds the limit of ${isVideo ? '10MB' : '5MB'}`,
+        message: `${isVideo ? 'Video' : 'Image/File'} size exceeds the limit of ${isVideo ? '60MB' : '20MB'}`,
         statusCode: 400
       });
     }

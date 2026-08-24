@@ -40,8 +40,8 @@ app.use(
 // Mount Stripe payment & webhook routes (webhook needs raw body parsing)
 app.use("/api/v1/payment", paymentRoutes);
 
-app.use(express.json({ limit: "50mb" }));
-app.use(express.urlencoded({ extended: true, limit: "50mb" }));
+app.use(express.json({ limit: "100mb" }));
+app.use(express.urlencoded({ extended: true, limit: "100mb" }));
 app.use(express.static(path.join(__dirname, "..", "public")));
 app.use("/uploads", express.static(path.join(__dirname, "..", "public", "uploads")));
 
